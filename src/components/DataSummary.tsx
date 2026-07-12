@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Sparkles, ArrowRight, CornerDownLeft } from 'lucide-react';
+import { Sparkles, ArrowRight, Paperclip, Database, BookOpen, Mic, Send } from 'lucide-react';
 import { ChatMessage } from '../types';
 import { CHAT_HISTORY } from '../data/mockData';
 
@@ -11,7 +11,10 @@ export default function DataSummary({ onSendMessage }: DataSummaryProps) {
   const [messages, setMessages] = useState<ChatMessage[]>(CHAT_HISTORY);
   const [input, setInput] = useState('');
   const [isTyping, setIsTyping] = useState(false);
+  const [activeTab, setActiveTab] = useState('AI MD와 대화');
   const endRef = useRef<HTMLDivElement>(null);
+
+  const tabs = ['AI MD와 대화', '기획서', '데이터 분석', '레퍼런스', '상품 구성'];
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -61,84 +64,135 @@ export default function DataSummary({ onSendMessage }: DataSummaryProps) {
     }, 1200);
   };
 
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSend(e as unknown as React.FormEvent);
+    }
+  };
+
   return (
-    <div className="w-full font-sans select-none pb-8 border-b border-neutral-100 mb-12">
-      <div className="flex items-center space-x-2 mb-8">
-        <Sparkles className="w-5 h-5 text-neutral-400" />
-        <h3 className="text-xl font-semibold text-neutral-800 tracking-tight">Workspace</h3>
-        <span className="text-sm font-light text-neutral-400 ml-4">실시간 트렌드 분석 및 상품 기획</span>
+    <div className="flex flex-col bg-white border border-neutral-200 rounded-2xl shadow-sm overflow-hidden h-[360px] font-sans">
+      
+      {/* Top Tabs */}
+      <div className="flex items-center px-4 pt-3 border-b border-neutral-100">
+        {tabs.map(tab => (
+          <button
+            key={tab}
+            onClick={() => setActiveTab(tab)}
+            className={`px-4 py-2 text-xs font-semibold transition-colors border-b-2 ${
+              activeTab === tab ? 'border-blue-600 text-blue-600' : 'border-transparent text-neutral-400 hover:text-neutral-700'
+            }`}
+          >
+            {tab}
+          </button>
+        ))}
       </div>
 
-      {/* Notion-style Document Body */}
-      <div className="space-y-8 max-h-[400px] overflow-y-auto no-scrollbar pb-10">
-        {messages.map((msg) => {
-          const isAI = msg.sender === 'ai';
-          return (
-            <div key={msg.id} className="group">
-              {isAI ? (
-                <div className="pl-6 border-l-2 border-neutral-200">
-                  <div className="flex items-center space-x-2 mb-1.5">
-                    <span className="text-xs font-bold text-blue-600 tracking-wider uppercase">AI MD</span>
-                    <span className="text-[10px] text-neutral-400">{msg.time}</span>
+      {/* Main Workspace Area */}
+      <div className="flex-1 flex flex-col p-6 overflow-hidden relative">
+        <div className="flex-1 overflow-y-auto pr-3 space-y-6 no-scrollbar pb-8">
+          {messages.map((msg) => {
+            const isAI = msg.sender === 'ai';
+            return (
+              <div key={msg.id} className="group">
+                {isAI ? (
+                  <div className="flex items-start gap-3 max-w-3xl">
+                    <div className="w-8 h-8 rounded-full bg-blue-50 flex items-center justify-center shrink-0 border border-blue-100 mt-1">
+                      <Sparkles className="w-4 h-4 text-blue-600" />
+                    </div>
+                    <div className="flex-1 space-y-1.5">
+                      <div className="flex items-center space-x-2">
+                        <span className="text-xs font-bold text-neutral-900">AI MD</span>
+                        <span className="text-[10px] text-neutral-400">{msg.time}</span>
+                      </div>
+                      <div className="text-sm text-neutral-700 font-light leading-relaxed whitespace-pre-line">
+                        {msg.text}
+                      </div>
+                      <div className="flex items-center space-x-2 text-[10px] text-neutral-400 font-medium bg-neutral-50 px-2 py-1.5 rounded-md inline-flex mt-2">
+                        <span>트렌드 스캔 완료</span>
+                        <ArrowRight className="w-2.5 h-2.5 text-neutral-300" />
+                        <span className="text-neutral-700">기획안 생성 완료</span>
+                      </div>
+                    </div>
                   </div>
-                  <div className="text-base text-neutral-700 font-light leading-relaxed whitespace-pre-line">
-                    {msg.text}
+                ) : (
+                  <div className="flex items-start gap-3 max-w-3xl ml-auto flex-row-reverse">
+                     <div className="w-8 h-8 rounded-full bg-neutral-100 flex items-center justify-center shrink-0 border border-neutral-200 mt-1 overflow-hidden">
+                       <img src="https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=100&auto=format&fit=crop&q=80" alt="User" className="w-full h-full object-cover" />
+                     </div>
+                     <div className="flex-1 space-y-1 text-right">
+                       <div className="flex items-center space-x-2 justify-end">
+                         <span className="text-[10px] text-neutral-400">{msg.time}</span>
+                         <span className="text-xs font-bold text-neutral-900">YOU</span>
+                       </div>
+                       <div className="inline-block text-sm font-medium text-neutral-900 bg-neutral-100 px-4 py-2 rounded-2xl rounded-tr-sm text-left">
+                         {msg.text}
+                       </div>
+                     </div>
                   </div>
-                  {/* Subtle progress indicator */}
-                  <div className="mt-3 flex items-center space-x-2 text-xs text-neutral-400 font-medium">
-                    <span>데이터 수집 완료</span>
-                    <ArrowRight className="w-3 h-3 text-neutral-300" />
-                    <span>트렌드 분석 완료</span>
-                    <ArrowRight className="w-3 h-3 text-neutral-300" />
-                    <span className="text-neutral-800">기획안 생성됨</span>
+                )}
+              </div>
+            );
+          })}
+          {isTyping && (
+             <div className="flex items-start gap-3 max-w-3xl">
+                <div className="w-8 h-8 rounded-full bg-blue-50 flex items-center justify-center shrink-0 border border-blue-100 mt-1">
+                  <Sparkles className="w-4 h-4 text-blue-600 animate-pulse" />
+                </div>
+                <div className="flex-1 space-y-1.5">
+                  <div className="flex items-center space-x-2">
+                    <span className="text-xs font-bold text-neutral-900">AI MD</span>
+                  </div>
+                  <div className="text-sm text-neutral-400 font-light flex items-center gap-1 h-6">
+                    <span className="w-1.5 h-1.5 bg-neutral-300 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                    <span className="w-1.5 h-1.5 bg-neutral-300 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                    <span className="w-1.5 h-1.5 bg-neutral-300 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
                   </div>
                 </div>
-              ) : (
-                <div>
-                  <div className="flex items-center space-x-2 mb-1">
-                    <span className="text-xs font-bold text-neutral-800 tracking-wider uppercase">You</span>
-                    <span className="text-[10px] text-neutral-400">{msg.time}</span>
-                  </div>
-                  <div className="text-lg font-medium text-neutral-900">
-                    {msg.text}
-                  </div>
-                </div>
-              )}
+             </div>
+          )}
+          <div ref={endRef} />
+        </div>
+
+        {/* Input Area (Claude/Cursor Style) */}
+        <div className="mt-auto bg-white border border-neutral-200 rounded-xl shadow-sm focus-within:ring-2 focus-within:ring-blue-100 focus-within:border-blue-300 transition-all">
+          <form onSubmit={handleSend} className="flex flex-col relative">
+            <textarea
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder="AI MD에게 메시지를 입력하세요... (Shift+Enter로 줄바꿈)"
+              className="w-full min-h-[48px] max-h-[120px] resize-none p-3 text-sm bg-transparent border-none focus:ring-0 text-neutral-900 placeholder:text-neutral-400"
+            />
+            
+            <div className="flex items-center justify-between p-2 border-t border-neutral-100 bg-neutral-50/50 rounded-b-xl">
+              <div className="flex items-center gap-1">
+                <button type="button" className="p-1.5 text-neutral-400 hover:text-neutral-700 hover:bg-neutral-100 rounded-md transition-colors flex items-center gap-1 text-[10px] font-semibold">
+                  <Paperclip className="w-3.5 h-3.5" /> 첨부파일
+                </button>
+                <button type="button" className="p-1.5 text-neutral-400 hover:text-neutral-700 hover:bg-neutral-100 rounded-md transition-colors flex items-center gap-1 text-[10px] font-semibold">
+                  <Database className="w-3.5 h-3.5" /> 데이터
+                </button>
+                <button type="button" className="p-1.5 text-neutral-400 hover:text-neutral-700 hover:bg-neutral-100 rounded-md transition-colors flex items-center gap-1 text-[10px] font-semibold">
+                  <BookOpen className="w-3.5 h-3.5" /> 참고자료
+                </button>
+                <button type="button" className="p-1.5 text-neutral-400 hover:text-neutral-700 hover:bg-neutral-100 rounded-md transition-colors flex items-center gap-1 text-[10px] font-semibold">
+                  <Mic className="w-3.5 h-3.5" /> 음성입력
+                </button>
+              </div>
+              
+              <button
+                type="submit"
+                disabled={!input.trim()}
+                className="p-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors shadow-sm"
+              >
+                <Send className="w-3.5 h-3.5" />
+              </button>
             </div>
-          );
-        })}
-        {isTyping && (
-          <div className="pl-6 border-l-2 border-neutral-200">
-             <div className="flex items-center space-x-2 mb-1.5">
-                <span className="text-xs font-bold text-blue-600 tracking-wider uppercase">AI MD</span>
-              </div>
-              <div className="text-base text-neutral-400 font-light flex items-center space-x-1">
-                <span className="w-1.5 h-1.5 bg-neutral-300 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                <span className="w-1.5 h-1.5 bg-neutral-300 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                <span className="w-1.5 h-1.5 bg-neutral-300 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
-              </div>
-          </div>
-        )}
-        <div ref={endRef} />
+          </form>
+        </div>
       </div>
-
-      {/* Notion-style Input */}
-      <form onSubmit={handleSend} className="mt-6 flex items-center border-b border-neutral-200 py-2 group-focus-within:border-neutral-400 transition-colors">
-        <input
-          type="text"
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          placeholder="여기에 원하는 상품의 키워드나 테마를 입력하세요..."
-          className="flex-1 text-lg font-light bg-transparent border-none focus:ring-0 text-neutral-900 placeholder:text-neutral-300 px-0"
-        />
-        <button
-          type="submit"
-          disabled={!input.trim()}
-          className="p-2 text-neutral-400 hover:text-neutral-800 disabled:opacity-50 transition-colors cursor-pointer"
-        >
-          <CornerDownLeft className="w-5 h-5" />
-        </button>
-      </form>
     </div>
   );
 }

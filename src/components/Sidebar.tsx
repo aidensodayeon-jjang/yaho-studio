@@ -1,42 +1,54 @@
-import { Home, Compass, PenTool, FolderKanban, BarChart3, Bookmark } from 'lucide-react';
-import { GENRES } from '../data/mockData';
+import { PlayCircle, LayoutGrid, Radar, FolderKanban, Calendar, BarChart3, Users, Bot, Settings, ChevronRight } from 'lucide-react';
 
 interface SidebarProps {
   activeTab: string;
   setActiveTab: (tab: string) => void;
-  activeGenre: string;
-  setActiveGenre: (genre: string) => void;
 }
 
 export default function Sidebar({
   activeTab,
-  setActiveTab,
-  activeGenre,
-  setActiveGenre
+  setActiveTab
 }: SidebarProps) {
   const menuItems = [
-    { id: 'home', label: '홈', icon: Home, subtitle: '' },
-    { id: 'discover', label: 'Discover', icon: Compass, subtitle: '기회 탐색' },
-    { id: 'studio', label: 'Studio', icon: PenTool, subtitle: '상품 기획 & 제작' },
-    { id: 'projects', label: 'Projects', icon: FolderKanban, subtitle: '진행 중인 프로젝트' },
-    { id: 'insight', label: 'Insight', icon: BarChart3, subtitle: '데이터 인사이트' },
-    { id: 'bookmark', label: 'Bookmark', icon: Bookmark, subtitle: '저장한 Echo' }
+    { id: 'opportunity', label: 'Opportunity', icon: PlayCircle },
+    { id: 'workspace', label: 'Workspace', icon: LayoutGrid },
+    { id: 'trend-radar', label: 'Trend Radar', icon: Radar },
+    { id: 'projects', label: 'Projects', icon: FolderKanban },
+    { id: 'calendar', label: 'Calendar', icon: Calendar },
+    { id: 'data-insight', label: 'Data Insight', icon: BarChart3 },
+    { id: 'partners', label: 'Partners', icon: Users },
+    { id: 'ai-assistant', label: 'AI Assistant', icon: Bot },
+    { id: 'settings', label: 'Settings', icon: Settings }
+  ];
+
+  const aiMdDna = [
+    { label: '국가 / 시장', value: '일본' },
+    { label: '지역', value: '서울' },
+    { label: '장르', value: 'K-POP, 웰니스' },
+    { label: '타겟', value: '20~30대 여성' },
+    { label: '시즌', value: '여름 (6~8월)' },
+    { label: '목표', value: '체험상품 개발' }
   ];
 
   return (
-    <aside className="w-64 bg-[#f7f7f5] border-r border-[#e6e6e6] flex flex-col h-screen overflow-y-auto shrink-0 select-none no-scrollbar">
+    <aside className="w-[240px] bg-white border-r border-neutral-200 flex flex-col h-screen overflow-y-auto shrink-0 select-none no-scrollbar font-sans text-neutral-800">
       {/* Logo Area */}
-      <div className="p-6 pb-4">
-        <h1 className="text-xl font-bold font-display tracking-tight text-[#1f1f1f]">
-          YAHO <span className="font-light">Studio</span>
-        </h1>
-        <p className="text-xs font-semibold text-blue-600 tracking-wider uppercase mt-0.5">
-          Echo to Tour
-        </p>
+      <div className="p-6 pb-8 flex items-center space-x-3">
+        <div className="w-8 h-8 bg-neutral-900 text-white flex items-center justify-center font-bold text-lg rounded-md">
+          Y
+        </div>
+        <div>
+          <h1 className="text-xl font-bold font-display tracking-tight text-neutral-900 leading-none">
+            YAHO <span className="font-light">Studio</span>
+          </h1>
+          <p className="text-[10px] font-medium text-neutral-500 mt-1">
+            AI Tourism MD Studio
+          </p>
+        </div>
       </div>
 
       {/* Main Navigation */}
-      <nav className="px-3 py-2 flex-col space-y-1">
+      <nav className="px-4 flex-col space-y-1 mb-8">
         {menuItems.map((item) => {
           const Icon = item.icon;
           const isActive = activeTab === item.id;
@@ -44,78 +56,51 @@ export default function Sidebar({
             <button
               key={item.id}
               onClick={() => setActiveTab(item.id)}
-              className={`w-full flex items-center px-3 py-2.5 rounded-md text-left transition-all ${
+              className={`w-full flex items-center px-4 py-3 rounded-xl text-left transition-all ${
                 isActive
-                  ? 'bg-blue-50/70 text-blue-700 font-medium'
-                  : 'text-[#4b4a47] hover:bg-neutral-200/50 hover:text-neutral-900'
+                  ? 'bg-neutral-100 font-bold text-neutral-900'
+                  : 'text-neutral-600 hover:bg-neutral-50 hover:text-neutral-900 font-medium'
               }`}
             >
-              <Icon className={`w-4 h-4 mr-3 shrink-0 ${isActive ? 'text-blue-600' : 'text-[#7f7f7f]'}`} />
-              <div className="flex flex-col">
-                <span className="text-sm font-medium">{item.label}</span>
-                {item.subtitle && (
-                  <span className="text-[10px] text-[#7f7f7f] -mt-0.5 font-light">
-                    {item.subtitle}
-                  </span>
-                )}
-              </div>
+              <Icon className={`w-5 h-5 mr-3 shrink-0 ${isActive ? 'text-neutral-900' : 'text-neutral-500'}`} />
+              <span className="text-sm">{item.label}</span>
             </button>
           );
         })}
       </nav>
 
-      {/* Divider */}
-      <div className="mx-4 my-2 border-t border-[#e6e6e6]" />
-
-      {/* Genre Title */}
-      <div className="px-6 py-2">
-        <h3 className="text-xs font-bold text-[#1f1f1f] tracking-wide uppercase">
-          장르 (Genre)
-        </h3>
-      </div>
-
-      {/* Genre List */}
-      <div className="px-3 flex-1 space-y-0.5">
-        {GENRES.map((g) => {
-          const isActive = activeGenre === g.id;
-          return (
-            <button
-              key={g.id}
-              onClick={() => setActiveGenre(g.id)}
-              className={`w-full flex items-center px-3 py-1.5 rounded-md text-left transition-all text-xs ${
-                isActive
-                  ? 'bg-neutral-200/80 text-neutral-900 font-medium'
-                  : 'text-[#5c5b57] hover:bg-neutral-200/40 hover:text-neutral-900'
-              }`}
-            >
-              <span className="mr-2 text-sm shrink-0">{g.icon}</span>
-              <span className="truncate">{g.name}</span>
-            </button>
-          );
-        })}
-      </div>
-
-      {/* User Profile Card (Bottom) */}
-      <div className="p-4 mt-auto border-t border-[#e6e6e6] bg-[#f2f2f0]/60">
-        <div className="flex items-center space-x-3">
-          <div className="relative shrink-0">
-            <img
-              src="https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=100&auto=format&fit=crop&q=80"
-              alt="MD 소다쌤"
-              className="w-10 h-10 rounded-full object-cover border border-[#e6e6e6]"
-              referrerPolicy="no-referrer"
-            />
-            <span className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-green-500 border-2 border-white rounded-full"></span>
+      <div className="mt-auto px-6 pb-6 space-y-6">
+        {/* AI MD DNA */}
+        <div>
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-xs font-bold text-neutral-900">AI MD DNA</h3>
+            <button className="text-[10px] text-neutral-500 hover:text-neutral-900 border border-neutral-200 rounded px-2 py-0.5 font-medium">편집</button>
           </div>
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center space-x-1.5">
-              <span className="text-xs font-bold text-[#1f1f1f] truncate">MD 소다쌤</span>
-              <span className="bg-blue-600 text-white text-[9px] font-bold px-1 rounded uppercase tracking-wider scale-90 shrink-0">
-                Pro
-              </span>
-            </div>
-            <p className="text-[10px] text-[#7f7f7f] truncate">여행사 상품기획팀</p>
+          <div className="space-y-2 mb-3">
+            {aiMdDna.map((item, idx) => (
+              <div key={idx} className="flex items-center text-[10px]">
+                <span className="text-neutral-400 w-16 flex-shrink-0">{item.label}</span>
+                <span className="text-neutral-800 font-medium truncate">{item.value}</span>
+              </div>
+            ))}
           </div>
+          <button className="text-[10px] font-medium text-neutral-900 flex items-center hover:underline">
+            프로필 상세 보기 <ChevronRight className="w-3 h-3 ml-0.5" />
+          </button>
+        </div>
+
+        <div className="border-t border-neutral-200" />
+
+        {/* Pro Plan */}
+        <div>
+          <div className="flex items-center space-x-2 mb-1">
+            <Settings className="w-4 h-4 text-neutral-900" />
+            <h3 className="text-sm font-bold text-neutral-900">Pro 플랜 이용 중</h3>
+          </div>
+          <p className="text-[10px] text-neutral-400 mb-3 pl-6">다음 결제일 2024.05.23</p>
+          <button className="w-full py-2 border border-neutral-200 rounded-lg text-xs font-semibold text-neutral-700 hover:bg-neutral-50 transition-colors">
+            플랜 관리
+          </button>
         </div>
       </div>
     </aside>

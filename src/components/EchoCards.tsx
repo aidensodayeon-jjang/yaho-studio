@@ -1,6 +1,6 @@
-import { ArrowRight, Sparkles } from 'lucide-react';
+import { ArrowRight } from 'lucide-react';
 import { EchoCard } from '../types';
-import { ECHO_CARDS, GENRES } from '../data/mockData';
+import { ECHO_CARDS } from '../data/mockData';
 
 interface EchoCardsProps {
   activeGenre: string;
@@ -17,7 +17,7 @@ export default function EchoCards({
   onCreateProduct,
   searchTerm
 }: EchoCardsProps) {
-  // Filter and limit to 3 cards for minimalist UX
+  // Filter and limit to 5 cards
   const filteredCards = ECHO_CARDS.filter((card) => {
     const matchesGenre = card.genreId === activeGenre;
     const matchesSearch = searchTerm
@@ -25,82 +25,87 @@ export default function EchoCards({
         card.tags.some((tag) => tag.toLowerCase().includes(searchTerm.toLowerCase()))
       : true;
     return matchesGenre && matchesSearch;
-  }).slice(0, 3);
-
-  const activeGenreName = GENRES.find((g) => g.id === activeGenre)?.name || 'K-POP';
+  }).slice(0, 5);
 
   return (
-    <div className="flex flex-col space-y-6 font-sans select-none mb-16">
-      <div className="flex items-center justify-between border-b border-neutral-100 pb-4">
-        <div className="flex items-baseline space-x-3">
-          <h3 className="text-xl font-bold text-neutral-900 tracking-tight">
-            {activeGenreName} Echo Insights
-          </h3>
-          <p className="text-sm text-neutral-400 font-light">
-            데이터 기반의 유망 기회
-          </p>
-        </div>
+    <div className="flex flex-col font-sans select-none bg-white rounded-2xl p-6 border border-neutral-100 shadow-sm">
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="text-sm font-bold text-neutral-900 tracking-tight">
+          AI 추천 상품 TOP 5
+        </h3>
+        <button className="text-[10px] text-neutral-400 hover:text-neutral-900 flex items-center transition-colors">
+          더보기 <ArrowRight className="w-3 h-3 ml-1" />
+        </button>
       </div>
 
       {filteredCards.length === 0 ? (
-        <div className="bg-neutral-50 rounded-2xl p-16 text-center text-neutral-400 text-sm font-light">
+        <div className="bg-neutral-50 rounded-xl p-10 text-center text-neutral-400 text-xs font-light">
           해당 조건의 기회가 없습니다.
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-          {filteredCards.map((card) => {
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
+          {filteredCards.map((card, index) => {
             const isSelected = selectedEcho?.id === card.id;
             return (
               <div
                 key={card.id}
                 onClick={() => onSelectEcho(card)}
                 className={`group flex flex-col cursor-pointer transition-all duration-300 ${
-                  isSelected ? 'opacity-100' : 'opacity-60 hover:opacity-100'
+                  isSelected ? 'opacity-100' : 'opacity-80 hover:opacity-100'
                 }`}
               >
-                {/* Minimalist Image Area */}
-                <div className="relative h-64 w-full rounded-2xl overflow-hidden mb-4 shadow-sm">
+                {/* Square Image Area */}
+                <div className="relative aspect-square w-full rounded-xl overflow-hidden mb-2 shadow-sm border border-neutral-100 bg-neutral-50">
                   <img
                     src={card.image}
                     alt={card.title}
                     className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
                     referrerPolicy="no-referrer"
                   />
-                  {isSelected && (
-                    <div className="absolute inset-0 ring-4 ring-inset ring-blue-600 rounded-2xl pointer-events-none"></div>
+                  
+                  {/* Rank Badge */}
+                  <div className="absolute top-2 left-2 w-5 h-5 bg-black/60 backdrop-blur-sm text-white text-[10px] font-bold flex items-center justify-center rounded">
+                    {index + 1}
+                  </div>
+                  
+                  {/* Hot Badge */}
+                  {card.isHot && (
+                    <div className="absolute top-2 left-8 bg-blue-600/90 backdrop-blur-sm text-white text-[8px] font-bold px-1.5 py-0.5 rounded">
+                      HOT
+                    </div>
                   )}
+
+                  {isSelected && (
+                    <div className="absolute inset-0 ring-2 ring-inset ring-blue-600 rounded-xl pointer-events-none"></div>
+                  )}
+                  
+                  {/* Hover Overlay */}
+                  <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center pointer-events-none">
+                     <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onCreateProduct(card);
+                        }}
+                        className="bg-white text-black px-3 py-1.5 rounded-full text-[10px] font-bold pointer-events-auto shadow-lg hover:scale-105 transition-transform"
+                     >
+                        상품 만들기
+                     </button>
+                  </div>
                 </div>
 
                 {/* Minimalist Content */}
-                <h4 className="text-lg font-bold text-neutral-900 tracking-tight mb-4">
+                <h4 className="text-xs font-bold text-neutral-900 tracking-tight truncate mb-1">
                   {card.title}
                 </h4>
 
-                <div className="flex items-center justify-between mb-6">
-                  <div>
-                    <span className="block text-xs text-neutral-400 uppercase tracking-widest mb-1 font-semibold">Confidence</span>
-                    <span className="text-2xl font-light text-neutral-800">{card.confidence}%</span>
+                <div className="flex flex-col gap-0.5">
+                  <div className="text-[9px] font-medium text-green-600">
+                    <span className="text-neutral-400 font-normal">예상판매력</span> {card.score}
                   </div>
-                  <div className="w-px h-8 bg-neutral-200"></div>
-                  <div>
-                    <span className="block text-xs text-neutral-400 uppercase tracking-widest mb-1 font-semibold">Opp. Score</span>
-                    <div className="flex items-center text-2xl font-light text-neutral-800">
-                      <Sparkles className="w-4 h-4 text-amber-400 mr-1" />
-                      {card.score}
-                    </div>
+                  <div className="text-[9px] font-medium text-neutral-600">
+                    <span className="text-neutral-400 font-normal">Confidence</span> {card.confidence}%
                   </div>
                 </div>
-
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onCreateProduct(card);
-                  }}
-                  className="w-full py-3 bg-neutral-100 hover:bg-neutral-200 text-neutral-900 rounded-xl font-medium text-sm transition-colors flex items-center justify-center space-x-2"
-                >
-                  <span>이 Echo로 상품 만들기</span>
-                  <ArrowRight className="w-4 h-4" />
-                </button>
               </div>
             );
           })}

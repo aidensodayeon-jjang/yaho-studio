@@ -21,8 +21,38 @@ export const GENRES: Genre[] = [
 export const ECHO_CARDS: EchoCard[] = [
   // --- K-POP GENRE ---
   {
-    id: 'kpop-1',
+    id: 'kpop-0',
     rank: 1,
+    isHot: true,
+    image: '/images/hongje_waterfall.png',
+    title: '홍제폭포 힐링 패키지',
+    tags: ['홍제폭포', '웰니스', '황톳길', '피크닉'],
+    score: 97,
+    searchVolume: 15420,
+    searchVolumeChange: 168,
+    posts: 10200,
+    postsChange: 42,
+    genreId: 'kpop',
+    subtitle: '홍제폭포 × 안산 황톳길 × 피크닉',
+    confidence: 97,
+    reasonDetails: [
+      '최근 30일 SNS 언급량이 168% 증가했어요.',
+      '일본 관광객 비율이 42%로 높은 편이에요.',
+      '평균 체류시간이 41분으로 짧아 타 소비 기회가 높아요.',
+      '웰니스 자연 힐링 트렌드와 강하게 연결돼요.'
+    ],
+    packageSteps: ['홍제폭포\n전망', '안산 황톳길\n맨발체험', '족욕 및\n휴식', '피크닉\n세트', '덕연이치킨\n로컬 맛집', '야간\n홍제폭포'],
+    thumbnails: ['홍제폭포', '황톳길', '피크닉', '덕연이치킨', '야간 홍제폭포'],
+    thumbnailImages: ['/images/hongje_waterfall.png', '/images/hongje_mud.png', '', '', ''],
+    aiAssistantContext: '홍제폭포 방문객은 평균 체류시간이 짧고 주변 소비가 부족합니다.\n\n황톳길, 피크닉, 로컬 맛집을 결합하면 체류시간과 소비를 크게 늘릴 수 있습니다.',
+    aiRecommendedActions: ['황톳길 체험상품 구성', '피크닉 세트 기획', '덕연이치킨 제휴', '야간 조명 프로그램', 'SNS 인증 이벤트'],
+    stayTimeMinutes: 41,
+    targetStayTimeMinutes: 140,
+    keywords: ['홍제폭포', '황톳길', '피크닉', '야경', '덕연이치킨', '웰니스']
+  },
+  {
+    id: 'kpop-1',
+    rank: 2,
     isHot: true,
     image: '/images/kpop_concert_geoje_1783824523946.png',
     title: '거제 × 리센느',

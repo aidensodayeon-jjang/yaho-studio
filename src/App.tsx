@@ -1,191 +1,155 @@
 import { useState, useEffect } from 'react';
 import Sidebar from './components/Sidebar';
-import Header from './components/Header';
-import DataSummary from './components/DataSummary';
-import GenreSelector from './components/GenreSelector';
-import EchoCards from './components/EchoCards';
-import EchoFeed from './components/EchoFeed';
-import HeroRecommendation from './components/HeroRecommendation';
+import RightSidebar from './components/RightSidebar';
+import OpportunityList from './components/OpportunityList';
+import OpportunityDetail from './components/OpportunityDetail';
 import CreateProductModal from './components/CreateProductModal';
+import { ChevronDown, Filter } from 'lucide-react';
 
 import { EchoCard, Project } from './types';
 import { ECHO_CARDS, RECENT_PROJECTS } from './data/mockData';
 
 export default function App() {
-  // Navigation and filtering states
-  const [activeTab, setActiveTab] = useState('home');
+  const [activeTab, setActiveTab] = useState('opportunity');
   const [activeGenre, setActiveGenre] = useState('kpop');
-  const [searchTerm, setSearchTerm] = useState('');
   
-  // Active Echo and Product Creation states
   const [selectedEcho, setSelectedEcho] = useState<EchoCard | null>(null);
-  const [recentProjects, setRecentProjects] = useState<Project[]>(RECENT_PROJECTS);
   
-  // Modal states
+  // Modal states (kept for compatibility)
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalEcho, setModalEcho] = useState<EchoCard | null>(null);
   const [modalCustomTitle, setModalCustomTitle] = useState('');
 
-  // Auto-select first echo card belonging to the selected genre
   useEffect(() => {
     const genreEchos = ECHO_CARDS.filter((card) => card.genreId === activeGenre);
     if (genreEchos.length > 0) {
       setSelectedEcho(genreEchos[0]);
     } else {
-      setSelectedEcho(null);
+      setSelectedEcho(ECHO_CARDS[0]);
     }
   }, [activeGenre]);
 
-  // Handle selected Echo
   const handleSelectEcho = (echo: EchoCard) => {
     setSelectedEcho(echo);
   };
 
-  // Open product creator modal from an Echo card
-  const handleCreateProductFromCard = (echo: EchoCard) => {
-    setModalEcho(echo);
-    setModalCustomTitle(`${echo.title} 2박 3일 시그니처 투어`);
-    setIsModalOpen(true);
-  };
-
-  // Open product creator from Right AI Recommendation Panel
-  const handlePlanFromRecommendation = (echo: EchoCard) => {
-    setModalEcho(echo);
-    setModalCustomTitle(`${echo.title} 2박 3일 BEST 기획 상품`);
-    setIsModalOpen(true);
-  };
-
-  // Open product creator from a general feed keyword
-  const handleCreateProductFromFeed = (title: string, tags: string[], image: string) => {
-    // Dynamically fabricate a minimal EchoCard matching the feed keyword
-    const tempEcho: EchoCard = {
-      id: `feed-temp-${Date.now()}`,
-      rank: 1,
-      isHot: true,
-      image: image,
-      title: title,
-      tags: tags,
-      score: 95,
-      searchVolume: 12500,
-      searchVolumeChange: 182,
-      posts: 8700,
-      postsChange: 156,
-      genreId: activeGenre,
-      subtitle: '지금 가장 핫한 실시간 키워드를 연계한 상품 기획안입니다.',
-      confidence: 95,
-      reasonDetails: [
-        '소셜 버즈 및 숏폼 조회수 급상승 순위 1위 키워드 반영',
-        '밀레니얼/젠지 타겟 핫플레이스 위주 패키지 자동 구성',
-        '대체 불가능한 현지 단독 미식 제휴 연계',
-        '경쟁사 등록 상품 0개로 출시 시 시장 점유 독점 가능'
-      ]
-    };
-    setModalEcho(tempEcho);
-    setModalCustomTitle(`${title} 실시간 트렌드 패키지`);
-    setIsModalOpen(true);
-  };
-
-  // Save new drafted project
   const handleSaveProject = (newProject: Project) => {
-    setRecentProjects((prev) => [newProject, ...prev]);
+    // mock save function to avoid error
+    console.log("Saved project", newProject);
   };
 
-  // User search can also filter the side genre list or help find matches
-  const handleChatPromptSent = (prompt: string) => {
-    // Simple filter matching: if prompt mentions food, drama, festivals, switch active genre
-    const promptLower = prompt.toLowerCase();
-    if (promptLower.includes('미식') || promptLower.includes('음식') || promptLower.includes('맛집')) {
-      setActiveGenre('food');
-    } else if (promptLower.includes('드라마') || promptLower.includes('촬영')) {
-      setActiveGenre('drama');
-    } else if (promptLower.includes('축제') || promptLower.includes('불꽃')) {
-      setActiveGenre('festival');
-    } else if (promptLower.includes('kpop') || promptLower.includes('케이팝') || promptLower.includes('리센느')) {
-      setActiveGenre('kpop');
-    }
-  };
+  const genres = [
+    { id: 'kpop', label: 'K-POP', icon: '🤍' },
+    { id: 'drama', label: '드라마', icon: '📺' },
+    { id: 'food', label: '미식', icon: '🍳' },
+    { id: 'wellness', label: '웰니스', icon: '🧘‍♀️' },
+    { id: 'nature', label: '자연', icon: '⛰️' },
+    { id: 'activity', label: '액티비티', icon: '🏃' },
+    { id: 'shopping', label: '쇼핑', icon: '🛍️' },
+    { id: 'festival', label: '축제', icon: '🎉' },
+    { id: 'culture', label: '문화/역사', icon: '🏛️' },
+    { id: 'family', label: '가족여행', icon: '👨‍👩‍👧‍👦' },
+  ];
 
   return (
-    <div className="flex h-screen bg-[#fafafa] text-neutral-800 overflow-hidden font-sans antialiased">
-      {/* 1. Left Sidebar Navigation */}
+    <div className="grid grid-cols-[240px_minmax(0,1fr)_320px] h-screen bg-[#fafafa] text-neutral-800 overflow-hidden font-sans antialiased">
+      {/* 1. Left Sidebar */}
       <Sidebar
         activeTab={activeTab}
         setActiveTab={setActiveTab}
-        activeGenre={activeGenre}
-        setActiveGenre={setActiveGenre}
       />
 
-      {/* Main Area Container */}
-      <div className="flex-1 flex flex-col min-w-0 h-screen bg-white">
-        {/* 2. Top Header Navigation */}
-        <Header searchTerm={searchTerm} setSearchTerm={setSearchTerm} />
+      {/* 2. Main Content (Center) */}
+      <main className="flex flex-col h-screen overflow-hidden bg-white border-r border-neutral-200">
+        
+        {/* Header / Filter Section */}
+        <div className="px-6 py-4 border-b border-neutral-100 shrink-0">
+          <div className="flex items-center space-x-2 mb-2">
+            <h1 className="text-2xl font-extrabold text-neutral-900 tracking-tight">Good Morning, 소다쌤! 👋</h1>
+          </div>
+          <p className="text-xs text-neutral-600 mb-3 flex items-center">
+            AI MD가 회원님의 전략에 맞는 새로운 Opportunity를 발견했어요.
+            <button className="ml-4 text-xs font-bold text-neutral-900 hover:underline flex items-center">
+              추천 기준 확인하기 <ChevronDown className="w-3 h-3 ml-0.5 -rotate-90" />
+            </button>
+          </p>
 
-        {/* 3. Page Layout based on Active Tab */}
-        <div className="flex-1 flex overflow-hidden">
-          {activeTab === 'home' ? (
-            <main className="flex-1 flex overflow-hidden">
-              {/* Left Column (Main Scrollable Workspace Area) */}
-              <div className="flex-1 overflow-y-auto px-12 py-10 space-y-12 bg-white no-scrollbar transition-colors duration-500">
-                {/* Hero Section: AI MD Recommendation */}
-                {selectedEcho && (
-                  <HeroRecommendation
-                    selectedEcho={selectedEcho}
-                    onPlanProduct={handlePlanFromRecommendation}
-                  />
-                )}
+          <div className="flex items-center space-x-4 mb-3">
+            <span className="text-[11px] font-bold text-neutral-900 shrink-0">관심 장르</span>
+            <div className="flex items-center space-x-2 overflow-x-auto no-scrollbar pb-1">
+              {genres.map(g => (
+                <button
+                  key={g.id}
+                  onClick={() => setActiveGenre(g.id)}
+                  className={`flex items-center px-2.5 py-1 rounded-full text-[11px] font-medium whitespace-nowrap transition-colors border ${
+                    activeGenre === g.id
+                      ? 'bg-neutral-900 text-white border-neutral-900'
+                      : 'bg-white text-neutral-600 border-neutral-200 hover:bg-neutral-50'
+                  }`}
+                >
+                  <span className="mr-1">{g.icon}</span> {g.label}
+                </button>
+              ))}
+            </div>
+          </div>
 
-                {/* Section 1: 오늘의 데이터 요약 (Chat Prompt & Processing Pipeline) */}
-                <DataSummary onSendMessage={handleChatPromptSent} />
+          <div className="flex items-center space-x-2.5">
+            <div className="flex items-center space-x-1.5 bg-white border border-neutral-200 rounded-lg px-2.5 py-1.5 text-[11px] font-medium text-neutral-700 cursor-pointer hover:bg-neutral-50">
+              <span>📍 서울</span> <ChevronDown className="w-3 h-3 text-neutral-400" />
+            </div>
+            <div className="flex items-center space-x-1.5 bg-white border border-neutral-200 rounded-lg px-2.5 py-1.5 text-[11px] font-medium text-neutral-700 cursor-pointer hover:bg-neutral-50">
+              <span className="w-1.5 h-1.5 rounded-full bg-red-500 inline-block"></span>
+              <span>일본</span> <ChevronDown className="w-3 h-3 text-neutral-400" />
+            </div>
+            <div className="flex items-center space-x-1.5 bg-white border border-neutral-200 rounded-lg px-2.5 py-1.5 text-[11px] font-medium text-neutral-700 cursor-pointer hover:bg-neutral-50">
+              <span>👤 20~30대 여성</span> <ChevronDown className="w-3 h-3 text-neutral-400" />
+            </div>
+            <div className="flex items-center space-x-1.5 bg-white border border-neutral-200 rounded-lg px-2.5 py-1.5 text-[11px] font-medium text-neutral-700 cursor-pointer hover:bg-neutral-50">
+              <span>☀️ 여름 (6~8월)</span> <ChevronDown className="w-3 h-3 text-neutral-400" />
+            </div>
+            <button className="flex items-center space-x-1 text-[11px] font-medium text-neutral-600 hover:text-neutral-900 px-2 py-1.5">
+              <Filter className="w-3 h-3" /> <span>필터 더보기</span>
+            </button>
+          </div>
+        </div>
 
-                {/* Section 2: 장르 선택 (Horizontal pill selectors) */}
-                <GenreSelector activeGenre={activeGenre} setActiveGenre={setActiveGenre} />
-
-                {/* Section 3: AI 추천 Echo 카드 그리드 */}
-                <EchoCards
+        {/* Scrollable Content Area */}
+        <div className="flex-1 overflow-y-auto no-scrollbar p-6 bg-[#fafafa]">
+          {activeTab === 'opportunity' ? (
+            <div className="flex flex-col gap-4 h-full">
+              <div className="shrink-0">
+                <OpportunityList
                   activeGenre={activeGenre}
                   selectedEcho={selectedEcho}
                   onSelectEcho={handleSelectEcho}
-                  onCreateProduct={handleCreateProductFromCard}
-                  searchTerm={searchTerm}
                 />
-
-                {/* Section 4: 실시간 Echo Feed 가로형 그리드 */}
-                <EchoFeed onCreateProduct={handleCreateProductFromFeed} />
               </div>
-            </main>
-          ) : (
-            // Simple placeholder screen for other sidebar tabs (Discover, Studio, Projects, etc.)
-            <div className="flex-1 flex flex-col items-center justify-center p-12 text-center text-neutral-400 font-sans select-none bg-[#fafafa]/45">
-              <div className="w-16 h-16 rounded-full bg-neutral-100 border border-neutral-200 flex items-center justify-center text-neutral-500 mb-4">
-                {activeTab === 'discover' && '🔍'}
-                {activeTab === 'studio' && '🎨'}
-                {activeTab === 'projects' && '📁'}
-                {activeTab === 'insight' && '📈'}
-                {activeTab === 'bookmark' && '🔖'}
+              <div className="bg-white rounded-2xl p-5 border border-neutral-200 shadow-sm flex-1 min-h-0 overflow-y-auto no-scrollbar">
+                <OpportunityDetail selectedEcho={selectedEcho} />
               </div>
-              <h3 className="text-sm font-bold text-neutral-800 capitalize">{activeTab} 페이지</h3>
-              <p className="text-xs text-neutral-400 mt-1 max-w-sm">
-                현재 {activeTab} 탭은 기획 중입니다. 좌측 메뉴의 &lsquo;홈&rsquo; 탭에서 다양한 실시간 관광 Echo 분석과 AI MD 추천 시스템을 테스트해 보세요.
-              </p>
-              <button
-                onClick={() => setActiveTab('home')}
-                className="mt-4 px-4 py-1.5 bg-[#18181b] hover:bg-neutral-800 text-white text-xs font-semibold rounded-lg transition-colors cursor-pointer"
-              >
-                홈으로 돌아가기
-              </button>
             </div>
+          ) : (
+             <div className="flex-1 flex items-center justify-center text-neutral-400 h-full">
+               <p>해당 메뉴의 기능은 준비 중입니다.</p>
+             </div>
           )}
         </div>
-      </div>
 
-      {/* 4. Product Draft Proposal Modal Sheet */}
-      <CreateProductModal
-        isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
-        echo={modalEcho}
-        customTitle={modalCustomTitle}
-        onSaveProject={handleSaveProject}
-      />
+      </main>
+
+      {/* 3. Right Sidebar (AI Assistant & Profile) */}
+      <RightSidebar selectedEcho={selectedEcho} />
+
+      {/* Modals */}
+      {isModalOpen && modalEcho && (
+        <CreateProductModal
+          isOpen={isModalOpen}
+          echo={modalEcho}
+          customTitle={modalCustomTitle}
+          onClose={() => setIsModalOpen(false)}
+          onSaveProject={handleSaveProject}
+        />
+      )}
     </div>
   );
 }

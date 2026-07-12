@@ -22,6 +22,14 @@ export interface EchoCard {
   subtitle: string;
   confidence: number;
   reasonDetails: string[];
+  packageSteps?: string[];
+  thumbnails?: string[];
+  thumbnailImages?: string[];
+  aiAssistantContext?: string;
+  aiRecommendedActions?: string[];
+  stayTimeMinutes?: number;
+  targetStayTimeMinutes?: number;
+  keywords?: string[];
 }
 
 export interface FeedItem {
