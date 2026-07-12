@@ -1,0 +1,6 @@
+{
+  "name": "YAHO Studio",
+  "description": "AI 관광 MD와 함께하는 트렌드 기반 여행상품 기획 플랫폼",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
