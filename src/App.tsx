@@ -1,11 +1,11 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import Sidebar from './components/Sidebar';
 import RightSidebar from './components/RightSidebar';
 import OpportunityList from './components/OpportunityList';
 import OpportunityDetail from './components/OpportunityDetail';
 import CreateProductModal from './components/CreateProductModal';
-import TourApiTest from './components/TourApiTest';
-import { ChevronDown, Filter } from 'lucide-react';
+import { ChevronDown, Filter, Search } from 'lucide-react';
+import { useTourData } from './hooks/useTourData';
 
 import { EchoCard, Project } from './types';
 import { ECHO_CARDS, RECENT_PROJECTS } from './data/mockData';
@@ -14,8 +14,22 @@ export default function App() {
   const [activeTab, setActiveTab] = useState('opportunity');
   const [activeGenre, setActiveGenre] = useState('kpop');
   const [areaCode, setAreaCode] = useState(1);
+  const [contentTypeId, setContentTypeId] = useState<number>(12);
+  const [searchInput, setSearchInput] = useState('');
+  const [keyword, setKeyword] = useState('');
   
+  const { data: tourData, loading, error, isNationwideFallback } = useTourData(areaCode, contentTypeId, keyword);
   const [selectedEcho, setSelectedEcho] = useState<EchoCard | null>(null);
+
+  const handleSearchSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    setKeyword(searchInput.trim());
+  };
+
+  const handleClearSearch = () => {
+    setSearchInput('');
+    setKeyword('');
+  };
 
   const regions = [
     { code: 1, name: '서울' },
@@ -33,14 +47,34 @@ export default function App() {
   const [modalEcho, setModalEcho] = useState<EchoCard | null>(null);
   const [modalCustomTitle, setModalCustomTitle] = useState('');
 
+  const categories = [
+    { typeId: 12, label: '관광지', icon: '🏛️' },
+    { typeId: 14, label: '문화시설', icon: '🎨' },
+    { typeId: 15, label: '축제/행사', icon: '🎉' },
+    { typeId: 25, label: '여행코스', icon: '🗺️' },
+    { typeId: 28, label: '레포츠', icon: '🏃' },
+    { typeId: 32, label: '숙박', icon: '🏨' },
+    { typeId: 38, label: '쇼핑', icon: '🛍️' },
+    { typeId: 39, label: '음식점', icon: '🍳' },
+  ];
+
   useEffect(() => {
-    const genreEchos = ECHO_CARDS.filter((card) => card.genreId === activeGenre);
-    if (genreEchos.length > 0) {
-      setSelectedEcho(genreEchos[0]);
+    if (tourData && tourData.length > 0) {
+      const firstSpot = tourData[0];
+      const fallbackCard = ECHO_CARDS[0];
+      setSelectedEcho({
+        ...fallbackCard,
+        id: firstSpot.contentid || 'tour-0',
+        contentid: firstSpot.contentid,
+        contenttypeid: firstSpot.contenttypeid,
+        title: firstSpot.title || '관광지',
+        addr1: firstSpot.addr1 || '',
+        image: firstSpot.firstimage || fallbackCard.image,
+      });
     } else {
-      setSelectedEcho(ECHO_CARDS[0]);
+      setSelectedEcho(null);
     }
-  }, [activeGenre]);
+  }, [tourData]);
 
   const handleSelectEcho = (echo: EchoCard) => {
     setSelectedEcho(echo);
@@ -50,19 +84,6 @@ export default function App() {
     // mock save function to avoid error
     console.log("Saved project", newProject);
   };
-
-  const genres = [
-    { id: 'kpop', label: 'K-POP', icon: '🤍' },
-    { id: 'drama', label: '드라마', icon: '📺' },
-    { id: 'food', label: '미식', icon: '🍳' },
-    { id: 'wellness', label: '웰니스', icon: '🧘‍♀️' },
-    { id: 'nature', label: '자연', icon: '⛰️' },
-    { id: 'activity', label: '액티비티', icon: '🏃' },
-    { id: 'shopping', label: '쇼핑', icon: '🛍️' },
-    { id: 'festival', label: '축제', icon: '🎉' },
-    { id: 'culture', label: '문화/역사', icon: '🏛️' },
-    { id: 'family', label: '가족여행', icon: '👨‍👩‍👧‍👦' },
-  ];
 
   return (
     <div className="grid grid-cols-[240px_minmax(0,1fr)_320px] h-screen bg-[#fafafa] text-neutral-800 overflow-hidden font-sans antialiased">
@@ -77,8 +98,43 @@ export default function App() {
         
         {/* Header / Filter Section */}
         <div className="px-6 py-4 border-b border-neutral-100 shrink-0">
-          <div className="flex items-center space-x-2 mb-2">
+          <div className="flex items-center justify-between mb-2">
             <h1 className="text-2xl font-extrabold text-neutral-900 tracking-tight">Good Morning, 소다쌤! 👋</h1>
+
+            {/* Keyword Search Bar */}
+            <form onSubmit={handleSearchSubmit} className="flex items-center space-x-1.5">
+              <div className="relative flex items-center">
+                <Search className="w-3.5 h-3.5 text-neutral-400 absolute left-2.5" />
+                <input
+                  type="text"
+                  value={searchInput}
+                  onChange={(e) => {
+                    setSearchInput(e.target.value);
+                    if (e.target.value.trim() === '' && keyword !== '') {
+                      setKeyword('');
+                    }
+                  }}
+                  placeholder="관광지명을 입력하세요"
+                  className="pl-8 pr-7 py-1.5 bg-neutral-50 border border-neutral-200 rounded-lg text-xs text-neutral-800 placeholder-neutral-400 focus:outline-none focus:border-neutral-900 w-52 transition-colors"
+                />
+                {searchInput && (
+                  <button
+                    type="button"
+                    onClick={handleClearSearch}
+                    className="absolute right-2 text-neutral-400 hover:text-neutral-700 text-xs font-bold"
+                    title="검색어 초기화"
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
+              <button
+                type="submit"
+                className="px-3 py-1.5 bg-neutral-900 hover:bg-neutral-800 text-white rounded-lg text-xs font-medium transition-colors"
+              >
+                검색
+              </button>
+            </form>
           </div>
           <p className="text-xs text-neutral-600 mb-3 flex items-center">
             AI MD가 회원님의 전략에 맞는 새로운 Opportunity를 발견했어요.
@@ -88,19 +144,19 @@ export default function App() {
           </p>
 
           <div className="flex items-center space-x-4 mb-3">
-            <span className="text-[11px] font-bold text-neutral-900 shrink-0">관심 장르</span>
+            <span className="text-[11px] font-bold text-neutral-900 shrink-0">관광 유형</span>
             <div className="flex items-center space-x-2 overflow-x-auto no-scrollbar pb-1">
-              {genres.map(g => (
+              {categories.map(c => (
                 <button
-                  key={g.id}
-                  onClick={() => setActiveGenre(g.id)}
+                  key={c.typeId}
+                  onClick={() => setContentTypeId(c.typeId)}
                   className={`flex items-center px-2.5 py-1 rounded-full text-[11px] font-medium whitespace-nowrap transition-colors border ${
-                    activeGenre === g.id
+                    contentTypeId === c.typeId
                       ? 'bg-neutral-900 text-white border-neutral-900'
                       : 'bg-white text-neutral-600 border-neutral-200 hover:bg-neutral-50'
                   }`}
                 >
-                  <span className="mr-1">{g.icon}</span> {g.label}
+                  <span className="mr-1">{c.icon}</span> {c.label}
                 </button>
               ))}
             </div>
@@ -147,12 +203,15 @@ export default function App() {
                   activeGenre={activeGenre}
                   selectedEcho={selectedEcho}
                   onSelectEcho={handleSelectEcho}
+                  tourData={tourData}
+                  loading={loading}
+                  error={error}
+                  isNationwideFallback={isNationwideFallback}
                 />
               </div>
               <div className="bg-white rounded-2xl p-5 border border-neutral-200 shadow-sm flex-1 min-h-0 overflow-y-auto no-scrollbar">
                 <OpportunityDetail selectedEcho={selectedEcho} />
               </div>
-              <TourApiTest areaCode={areaCode} />
             </div>
           ) : (
              <div className="flex-1 flex items-center justify-center text-neutral-400 h-full">

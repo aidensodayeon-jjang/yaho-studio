@@ -1,16 +1,22 @@
 import { useState, useEffect } from 'react';
-import { fetchTourSpotsByArea, TourSpotItem } from '../api/tourApi';
+import { fetchTourSpots, TourSpotItem } from '../api/tourApi';
 
 export interface UseTourDataResult {
   loading: boolean;
   error: string | null;
   data: TourSpotItem[];
+  isNationwideFallback: boolean;
 }
 
-export function useTourData(areaCode: number): UseTourDataResult {
+export function useTourData(
+  areaCode?: number,
+  contentTypeId?: number,
+  keyword?: string
+): UseTourDataResult {
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [data, setData] = useState<TourSpotItem[]>([]);
+  const [isNationwideFallback, setIsNationwideFallback] = useState<boolean>(false);
 
   useEffect(() => {
     let isMounted = true;
@@ -19,9 +25,10 @@ export function useTourData(areaCode: number): UseTourDataResult {
       setLoading(true);
       setError(null);
       try {
-        const result = await fetchTourSpotsByArea(areaCode);
+        const result = await fetchTourSpots(areaCode, contentTypeId, keyword);
         if (isMounted) {
-          setData(result);
+          setData(result.spots);
+          setIsNationwideFallback(result.isNationwideFallback);
           setLoading(false);
         }
       } catch (err: unknown) {
@@ -29,6 +36,7 @@ export function useTourData(areaCode: number): UseTourDataResult {
           const message = err instanceof Error ? err.message : '알 수 없는 오류가 발생했습니다.';
           setError(message);
           setData([]);
+          setIsNationwideFallback(false);
           setLoading(false);
         }
       }
@@ -39,7 +47,7 @@ export function useTourData(areaCode: number): UseTourDataResult {
     return () => {
       isMounted = false;
     };
-  }, [areaCode]);
+  }, [areaCode, contentTypeId, keyword]);
 
-  return { loading, error, data };
+  return { loading, error, data, isNationwideFallback };
 }

@@ -1,27 +1,52 @@
 import { EchoCard } from '../types';
+import { TourSpotItem } from '../api/tourApi';
 import { ECHO_CARDS } from '../data/mockData';
-import { ChevronLeft, ChevronRight, Check } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Check, AlertCircle } from 'lucide-react';
+import { tourSpotToEchoCard } from '../utils/tourSpotAdapter';
+
+const DEFAULT_IMAGE_PLACEHOLDER = 'https://images.unsplash.com/photo-1540555700478-4be289fbecef?auto=format&fit=crop&w=800&q=80';
 
 interface OpportunityListProps {
   activeGenre: string;
   selectedEcho: EchoCard | null;
   onSelectEcho: (echo: EchoCard) => void;
+  tourData?: TourSpotItem[];
+  loading?: boolean;
+  error?: string | null;
+  isNationwideFallback?: boolean;
 }
 
-export default function OpportunityList({ activeGenre, selectedEcho, onSelectEcho }: OpportunityListProps) {
-  // Filter cards (ignoring genre strictly for demo, or filter if requested)
-  // The image shows a horizontal scrolling list of all "오늘의 Opportunity"
-  const cards = ECHO_CARDS.slice(0, 5);
+export default function OpportunityList({
+  selectedEcho,
+  onSelectEcho,
+  tourData = [],
+  loading = false,
+  error = null,
+  isNationwideFallback = false,
+}: OpportunityListProps) {
+  // TourAPI 데이터가 존재하면 TourAPI 카드 구성, 
+  // API 결과는 성공했으나 빈 배열일 경우 noData 상태
+  const hasTourData = tourData && tourData.length > 0;
+  const isEmptyData = !loading && !error && tourData && tourData.length === 0;
+
+  const cards: EchoCard[] = hasTourData
+    ? tourData.slice(0, 5).map((spot, idx) => tourSpotToEchoCard(spot, idx))
+    : [];
 
   return (
-    <div className="mb-8 font-sans">
-      <div className="flex items-center justify-between mb-4">
+    <div className="mb-4 font-sans">
+      <div className="flex items-center justify-between mb-2">
         <div className="flex items-center space-x-3">
-          <h2 className="text-lg font-bold text-neutral-900 tracking-tight">오늘의 Opportunity</h2>
+          <h2 className="text-base font-bold text-neutral-900 tracking-tight">오늘의 Opportunity</h2>
           <div className="flex items-center space-x-2 text-[10px] text-neutral-500 font-medium">
             <span className="bg-neutral-100 px-2 py-0.5 rounded">AI 추천</span>
             <span className="bg-neutral-100 px-2 py-0.5 rounded">실시간 데이터 기반</span>
           </div>
+          {isNationwideFallback && !loading && (
+            <span className="text-[10px] text-amber-600 bg-amber-50 px-2 py-0.5 rounded font-medium border border-amber-200">
+              선택한 필터에서 결과가 없어 전국 검색 결과를 표시합니다.
+            </span>
+          )}
         </div>
         <div className="flex items-center space-x-3">
           <button className="text-xs text-neutral-600 font-medium hover:text-neutral-900 transition-colors">
@@ -38,96 +63,130 @@ export default function OpportunityList({ activeGenre, selectedEcho, onSelectEch
         </div>
       </div>
 
-      <div className="flex space-x-4 overflow-x-auto no-scrollbar pb-2">
-        {cards.map((card, idx) => {
-          const isSelected = selectedEcho?.id === card.id;
-          const rank = String(idx + 1).padStart(2, '0');
-          const isHigh = card.score >= 90;
-          
-          return (
-            <div
-              key={card.id}
-              onClick={() => onSelectEcho(card)}
-              className={`flex-shrink-0 w-[300px] bg-white rounded-xl border transition-all cursor-pointer flex flex-col p-4 relative ${
-                isSelected ? 'border-neutral-900 shadow-md ring-1 ring-neutral-900' : 'border-neutral-200 shadow-sm hover:border-neutral-300'
-              }`}
-            >
-              {isSelected && (
-                <div className="absolute top-4 right-4 bg-black text-white rounded-full p-0.5">
-                  <Check className="w-3 h-3" />
-                </div>
-              )}
-              
-              <div className="flex items-center space-x-2 mb-3">
-                <span className="text-xs font-bold text-neutral-900">{rank}</span>
-                <span className={`text-[10px] font-bold px-1.5 rounded-sm uppercase tracking-wider ${isHigh ? 'text-neutral-900 bg-neutral-100' : 'text-orange-500 bg-orange-50'}`}>
-                  {isHigh ? 'HIGH' : 'MEDIUM'}
-                </span>
-                {idx === 0 && (
-                  <span className="text-[10px] font-bold px-1.5 rounded-sm bg-neutral-900 text-white uppercase tracking-wider">
-                    ACTIVE
-                  </span>
+      <div className="flex space-x-3 overflow-x-auto no-scrollbar pb-1 min-h-[165px] items-center">
+        {loading ? (
+          <div className="flex-1 flex flex-col items-center justify-center py-8 bg-neutral-50 rounded-xl border border-neutral-200 text-neutral-500 text-xs">
+            <div className="w-5 h-5 border-2 border-neutral-900 border-t-transparent rounded-full animate-spin mb-2"></div>
+            <span>관광정보를 불러오는 중입니다...</span>
+          </div>
+        ) : error ? (
+          <div className="flex-1 flex flex-col items-center justify-center py-8 bg-red-50 rounded-xl border border-red-200 text-red-600 text-xs px-4">
+            <AlertCircle className="w-5 h-5 mb-1 text-red-500" />
+            <span className="font-bold mb-0.5">데이터 조회 오류</span>
+            <span className="text-red-500 text-center">{error}</span>
+          </div>
+        ) : isEmptyData ? (
+          <div className="flex-1 flex flex-col items-center justify-center py-8 bg-neutral-50 rounded-xl border border-neutral-200 text-neutral-500 text-xs">
+            <span className="text-base mb-1">🔍</span>
+            <span className="font-medium text-neutral-700">검색 결과가 없습니다.</span>
+          </div>
+        ) : (
+          cards.map((card, idx) => {
+            const isSelected = selectedEcho?.id === card.id;
+            const rank = String(idx + 1).padStart(2, '0');
+            const isHigh = card.score >= 90;
+
+            return (
+              <div
+                key={card.id}
+                onClick={() => onSelectEcho(card)}
+                className={`flex-shrink-0 w-[270px] bg-white rounded-xl border transition-all cursor-pointer flex flex-col p-3 relative ${
+                  isSelected ? 'border-neutral-900 shadow-md ring-1 ring-neutral-900' : 'border-neutral-200 shadow-sm hover:border-neutral-300'
+                }`}
+              >
+                {isSelected && (
+                  <div className="absolute top-3 right-3 bg-black text-white rounded-full p-0.5">
+                    <Check className="w-3 h-3" />
+                  </div>
                 )}
-                {idx === 2 && (
-                  <span className="text-[10px] font-bold px-1.5 rounded-sm border border-neutral-200 text-neutral-600 uppercase tracking-wider">
-                    NEW
+
+                <div className="flex items-center space-x-2 mb-2">
+                  <span className="text-xs font-bold text-neutral-900">{rank}</span>
+                  <span className={`text-[10px] font-bold px-1.5 rounded-sm uppercase tracking-wider ${isHigh ? 'text-neutral-900 bg-neutral-100' : 'text-orange-500 bg-orange-50'}`}>
+                    {isHigh ? 'HIGH' : 'MEDIUM'}
                   </span>
-                )}
-              </div>
-
-              <h3 className="text-sm font-bold text-neutral-900 mb-1 truncate">{card.title}</h3>
-              <div className="flex items-center space-x-1 mb-4">
-                {card.tags.slice(0, 3).map(tag => (
-                  <span key={tag} className="text-[10px] text-neutral-500">#{tag}</span>
-                ))}
-              </div>
-
-              <div className="flex items-start justify-between mb-4 flex-1">
-                <div className="flex flex-col">
-                  <div className="w-12 h-12 rounded-full border-2 border-neutral-900 flex items-center justify-center mb-1 relative">
-                    <span className="text-xl font-bold text-neutral-900">{card.score}</span>
-                    {/* Fake progress ring using SVG or simple border, just using border for now */}
-                  </div>
-                  <span className="text-[8px] text-neutral-400 text-center leading-tight mt-1">Opportunity<br/>Score</span>
+                  {idx === 0 && (
+                    <span className="text-[10px] font-bold px-1.5 rounded-sm bg-neutral-900 text-white uppercase tracking-wider">
+                      ACTIVE
+                    </span>
+                  )}
+                  {idx === 2 && (
+                    <span className="text-[10px] font-bold px-1.5 rounded-sm border border-neutral-200 text-neutral-600 uppercase tracking-wider">
+                      NEW
+                    </span>
+                  )}
                 </div>
 
-                <div className="flex-1 px-3 space-y-1.5 mt-1">
-                  <div className="flex items-center justify-between text-[9px]">
-                    <span className="text-neutral-500 flex items-center gap-1"><span className="w-3 text-center">📈</span> SNS 언급량</span>
-                    <span className="font-bold text-neutral-900">+{card.searchVolumeChange}%</span>
-                  </div>
-                  <div className="flex items-center justify-between text-[9px]">
-                    <span className="text-neutral-500 flex items-center gap-1"><span className="w-3 text-center">👥</span> 외국인 비율</span>
-                    <span className="font-bold text-neutral-900">+{card.postsChange}%</span>
-                  </div>
-                  <div className="flex items-center justify-between text-[9px]">
-                    <span className="text-neutral-500 flex items-center gap-1"><span className="w-3 text-center">⏱️</span> 평균 체류시간</span>
-                    <span className="font-bold text-neutral-900">{41 + idx * 5}분</span>
-                  </div>
-                  <div className="flex items-center justify-between text-[9px]">
-                    <span className="text-neutral-500 flex items-center gap-1"><span className="w-3 text-center">💎</span> 상품/체험 부족</span>
-                    <span className="font-bold text-neutral-900">{isHigh ? '높음' : '보통'}</span>
-                  </div>
-                </div>
+                <h3 className="text-xs font-bold text-neutral-900 mb-0.5 truncate">{card.title}</h3>
 
-                <div className="w-16 h-24 shrink-0 rounded-lg overflow-hidden ml-1">
-                  <img src={card.image} alt={card.title} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
-                </div>
-              </div>
-
-              <div className="pt-3 border-t border-neutral-100">
-                <p className="text-[8px] text-neutral-400 mb-1.5">패키지에 포함된 체험</p>
-                <div className="flex items-center gap-1 overflow-hidden">
-                  {card.tags.map(tag => (
-                    <span key={tag} className="text-[9px] bg-neutral-100 text-neutral-600 px-1.5 py-0.5 rounded shrink-0">{tag}</span>
+                <div className="flex items-center space-x-1 mb-2">
+                  {card.tags.slice(0, 3).map(tag => (
+                    <span key={tag} className="text-[9px] text-neutral-500">#{tag}</span>
                   ))}
-                  <span className="text-[9px] bg-neutral-100 text-neutral-600 px-1.5 py-0.5 rounded shrink-0">피크닉</span>
-                  <span className="text-[9px] bg-neutral-100 text-neutral-600 px-1.5 py-0.5 rounded shrink-0">덕연이치킨</span>
+                </div>
+
+                <div className="flex items-start justify-between mb-2 flex-1">
+                  <div className="flex flex-col">
+                    <div className="w-10 h-10 rounded-full border-2 border-neutral-900 flex items-center justify-center mb-0.5 relative">
+                      <span className="text-base font-bold text-neutral-900">{card.score}</span>
+                    </div>
+                    <span className="text-[7px] text-neutral-400 text-center leading-tight">Opportunity<br/>Score</span>
+                  </div>
+
+                  <div className="flex-1 px-2 space-y-1 mt-0.5">
+                    <div className="flex items-center justify-between text-[9px]">
+                      <span className="text-neutral-500 flex items-center gap-0.5"><span className="w-3 text-center">📈</span> SNS 언급량</span>
+                      <span className="font-bold text-neutral-900">+{card.searchVolumeChange}%</span>
+                    </div>
+                    <div className="flex items-center justify-between text-[9px]">
+                      <span className="text-neutral-500 flex items-center gap-0.5"><span className="w-3 text-center">👥</span> 외국인 비율</span>
+                      <span className="font-bold text-neutral-900">+{card.postsChange}%</span>
+                    </div>
+                    <div className="flex items-center justify-between text-[9px]">
+                      <span className="text-neutral-500 flex items-center gap-0.5"><span className="w-3 text-center">⏱️</span> 평균 체류시간</span>
+                      <span className="font-bold text-neutral-900">{41 + idx * 5}분</span>
+                    </div>
+                    <div className="flex items-center justify-between text-[9px]">
+                      <span className="text-neutral-500 flex items-center gap-0.5"><span className="w-3 text-center">💎</span> 상품/체험 부족</span>
+                      <span className="font-bold text-neutral-900">{isHigh ? '높음' : '보통'}</span>
+                    </div>
+                  </div>
+
+                  <div className="w-14 h-20 shrink-0 rounded-lg overflow-hidden ml-1 bg-neutral-100 border border-neutral-200 relative">
+                    <img
+                      src={card.image}
+                      alt={card.title}
+                      className="w-full h-full object-cover"
+                      referrerPolicy="no-referrer"
+                      onError={(e) => {
+                        const target = e.currentTarget;
+                        if (target.src.endsWith('/images/placeholders/default.jpg')) {
+                          return; // 무한 반복 방지
+                        }
+                        target.src = '/images/placeholders/default.jpg';
+                      }}
+                    />
+                    {card.imageSource === 'placeholder' && (
+                      <span className="absolute bottom-0 inset-x-0 bg-black/60 text-white text-[7px] font-medium py-0.5 text-center leading-tight">
+                        테마 이미지
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                <div className="pt-2 border-t border-neutral-100">
+                  <p className="text-[8px] text-neutral-400 mb-1">패키지에 포함된 체험</p>
+                  <div className="flex items-center gap-1 overflow-hidden">
+                    {card.tags.map(tag => (
+                      <span key={tag} className="text-[9px] bg-neutral-100 text-neutral-600 px-1.5 py-0.5 rounded shrink-0">{tag}</span>
+                    ))}
+                    <span className="text-[9px] bg-neutral-100 text-neutral-600 px-1.5 py-0.5 rounded shrink-0">피크닉</span>
+                  </div>
                 </div>
               </div>
-            </div>
-          );
-        })}
+            );
+          })
+        )}
       </div>
     </div>
   );

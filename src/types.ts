@@ -30,6 +30,16 @@ export interface EchoCard {
   stayTimeMinutes?: number;
   targetStayTimeMinutes?: number;
   keywords?: string[];
+  addr1?: string;
+  contentid?: string;
+  contenttypeid?: string;
+  tel?: string;
+  homepage?: string;
+  overview?: string;
+  hasOriginalImage?: boolean;
+  imageSource?: 'tourApi' | 'placeholder';
+  fallbackCategory?: string;
+  fallbackLabel?: string;
 }
 
 export interface FeedItem {
