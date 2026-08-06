@@ -4,6 +4,7 @@ import RightSidebar from './components/RightSidebar';
 import OpportunityList from './components/OpportunityList';
 import OpportunityDetail from './components/OpportunityDetail';
 import CreateProductModal from './components/CreateProductModal';
+import TourApiTest from './components/TourApiTest';
 import { ChevronDown, Filter } from 'lucide-react';
 
 import { EchoCard, Project } from './types';
@@ -12,8 +13,20 @@ import { ECHO_CARDS, RECENT_PROJECTS } from './data/mockData';
 export default function App() {
   const [activeTab, setActiveTab] = useState('opportunity');
   const [activeGenre, setActiveGenre] = useState('kpop');
+  const [areaCode, setAreaCode] = useState(1);
   
   const [selectedEcho, setSelectedEcho] = useState<EchoCard | null>(null);
+
+  const regions = [
+    { code: 1, name: '서울' },
+    { code: 6, name: '부산' },
+    { code: 2, name: '인천' },
+    { code: 3, name: '대전' },
+    { code: 4, name: '대구' },
+    { code: 5, name: '광주' },
+    { code: 7, name: '울산' },
+    { code: 39, name: '제주' },
+  ];
   
   // Modal states (kept for compatibility)
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -94,8 +107,20 @@ export default function App() {
           </div>
 
           <div className="flex items-center space-x-2.5">
-            <div className="flex items-center space-x-1.5 bg-white border border-neutral-200 rounded-lg px-2.5 py-1.5 text-[11px] font-medium text-neutral-700 cursor-pointer hover:bg-neutral-50">
-              <span>📍 서울</span> <ChevronDown className="w-3 h-3 text-neutral-400" />
+            <div className="flex items-center space-x-1 overflow-x-auto no-scrollbar py-0.5">
+              {regions.map((r) => (
+                <button
+                  key={r.code}
+                  onClick={() => setAreaCode(r.code)}
+                  className={`px-2.5 py-1 rounded-lg text-[11px] font-medium border transition-colors ${
+                    areaCode === r.code
+                      ? 'bg-neutral-900 text-white border-neutral-900'
+                      : 'bg-white text-neutral-700 border-neutral-200 hover:bg-neutral-50'
+                  }`}
+                >
+                  📍 {r.name}
+                </button>
+              ))}
             </div>
             <div className="flex items-center space-x-1.5 bg-white border border-neutral-200 rounded-lg px-2.5 py-1.5 text-[11px] font-medium text-neutral-700 cursor-pointer hover:bg-neutral-50">
               <span className="w-1.5 h-1.5 rounded-full bg-red-500 inline-block"></span>
@@ -127,6 +152,7 @@ export default function App() {
               <div className="bg-white rounded-2xl p-5 border border-neutral-200 shadow-sm flex-1 min-h-0 overflow-y-auto no-scrollbar">
                 <OpportunityDetail selectedEcho={selectedEcho} />
               </div>
+              <TourApiTest areaCode={areaCode} />
             </div>
           ) : (
              <div className="flex-1 flex items-center justify-center text-neutral-400 h-full">
