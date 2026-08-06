@@ -15,7 +15,7 @@ export function getTourFallbackImage(
   const churchKeywords = ['성당', '교회', '대성당', '예배당', 'chapel', 'church', 'cathedral'];
   if (churchKeywords.some((kw) => safeTitle.includes(kw))) {
     return {
-      image: '/images/placeholders/church.jpg',
+      image: '/images/place/church.png',
       fallbackCategory: 'church',
       fallbackLabel: '성당·교회 테마 이미지',
     };
@@ -28,7 +28,7 @@ export function getTourFallbackImage(
   // 단어 일부 오매칭 방지: '성당' 등은 위에서 미리 처리됨
   if (palaceKeywords.some((kw) => safeTitle.includes(kw))) {
     return {
-      image: '/images/placeholders/palace.jpg',
+      image: '/images/place/palace.png',
       fallbackCategory: 'palace',
       fallbackLabel: '고궁·한옥 테마 이미지',
     };
@@ -40,7 +40,7 @@ export function getTourFallbackImage(
   ];
   if (oceanKeywords.some((kw) => safeTitle.includes(kw))) {
     return {
-      image: '/images/placeholders/ocean.jpg',
+      image: '/images/place/ocean.png',
       fallbackCategory: 'ocean',
       fallbackLabel: '바다·해변 테마 이미지',
     };
@@ -52,7 +52,7 @@ export function getTourFallbackImage(
   ];
   if (natureKeywords.some((kw) => safeTitle.includes(kw))) {
     return {
-      image: '/images/placeholders/nature.jpg',
+      image: '/images/place/nature.png',
       fallbackCategory: 'nature',
       fallbackLabel: '자연·숲 테마 이미지',
     };
@@ -64,7 +64,7 @@ export function getTourFallbackImage(
   ];
   if (marketKeywords.some((kw) => safeTitle.includes(kw))) {
     return {
-      image: '/images/placeholders/market.jpg',
+      image: '/images/place/market..png',
       fallbackCategory: 'market',
       fallbackLabel: '시장·거리 테마 이미지',
     };
@@ -76,7 +76,7 @@ export function getTourFallbackImage(
   ];
   if (typeIdStr === '39' || foodKeywords.some((kw) => safeTitle.includes(kw))) {
     return {
-      image: '/images/placeholders/food.jpg',
+      image: '/images/place/food..png',
       fallbackCategory: 'food',
       fallbackLabel: '미식·카페 테마 이미지',
     };
@@ -84,7 +84,7 @@ export function getTourFallbackImage(
 
   // 7. G: 기본 이미지
   return {
-    image: '/images/placeholders/default.jpg',
+    image: '/images/place/default.png',
     fallbackCategory: 'default',
     fallbackLabel: '관광지 기본 이미지',
   };

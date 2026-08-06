@@ -197,7 +197,7 @@ export default function App() {
         {/* Scrollable Content Area */}
         <div className="flex-1 overflow-y-auto no-scrollbar p-6 bg-[#fafafa]">
           {activeTab === 'opportunity' ? (
-            <div className="flex flex-col gap-4 h-full">
+            <div className="flex flex-col gap-4">
               <div className="shrink-0">
                 <OpportunityList
                   activeGenre={activeGenre}
@@ -209,8 +209,8 @@ export default function App() {
                   isNationwideFallback={isNationwideFallback}
                 />
               </div>
-              <div className="bg-white rounded-2xl p-5 border border-neutral-200 shadow-sm flex-1 min-h-0 overflow-y-auto no-scrollbar">
-                <OpportunityDetail selectedEcho={selectedEcho} />
+              <div className="bg-white rounded-2xl p-5 border border-neutral-200 shadow-sm">
+                <OpportunityDetail selectedEcho={selectedEcho} onSelectEcho={handleSelectEcho} />
               </div>
             </div>
           ) : (

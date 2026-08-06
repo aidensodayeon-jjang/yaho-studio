@@ -1,7 +1,12 @@
-import { Bookmark, ChevronLeft, ChevronRight, Check, Phone, Globe, Info } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { Bookmark, ChevronLeft, ChevronRight, Check, Phone, Globe, Info, Sparkles, Target, Package, ThumbsUp, AlertTriangle, Lightbulb, MapPin, Map } from 'lucide-react';
 import { EchoCard } from '../types';
 import { useTourDetail } from '../hooks/useTourDetail';
+import { useRelatedTourSpots } from '../hooks/useRelatedTourSpots';
+import { tourSpotToEchoCard } from '../utils/tourSpotAdapter';
 import { getTourFallbackImage } from '../utils/getTourFallbackImage';
+import { calculateOpportunityScore } from '../utils/calculateOpportunityScore';
+import { analyzeOpportunity, AIAnalysisResult } from '../ai/analyzeOpportunity';
 
 // HTML 태그 제거용 순수 텍스트 정화 함수
 function stripHtmlTags(html?: string): string {
@@ -36,9 +41,10 @@ function extractHomepageUrl(html?: string): { url: string | null; label: string 
 
 interface OpportunityDetailProps {
   selectedEcho: EchoCard | null;
+  onSelectEcho?: (echo: EchoCard) => void;
 }
 
-export default function OpportunityDetail({ selectedEcho }: OpportunityDetailProps) {
+export default function OpportunityDetail({ selectedEcho, onSelectEcho }: OpportunityDetailProps) {
   if (!selectedEcho) return null;
 
   // TourAPI 상세 조회 hook 호출
@@ -46,6 +52,9 @@ export default function OpportunityDetail({ selectedEcho }: OpportunityDetailPro
     selectedEcho.contentid,
     selectedEcho.contenttypeid
   );
+
+  const [aiAnalysis, setAiAnalysis] = useState<AIAnalysisResult | null>(null);
+  const [aiLoading, setAiLoading] = useState<boolean>(false);
 
   const tabs = ['기회 분석 요약', '방문자 분석', 'SNS 트렌드', '리뷰/평가', '경쟁 분석', '상품 아이디어', '예상 효과', '실행 가이드'];
 
@@ -56,17 +65,98 @@ export default function OpportunityDetail({ selectedEcho }: OpportunityDetailPro
   const homepageInfo = extractHomepageUrl(detailData?.homepage || selectedEcho.homepage);
   const displayContentId = selectedEcho.contentid || detailData?.contentid;
 
+  // 연관 관광지 조회 hook 호출 (위치기반/카테고리 기반 + 주소/키워드 파싱)
+  const { spots: relatedSpots, loading: relatedLoading, error: relatedError } = useRelatedTourSpots(
+    selectedEcho.contentid || detailData?.contentid,
+    detailData?.mapx || selectedEcho.mapx,
+    detailData?.mapy || selectedEcho.mapy,
+    detailData?.contenttypeid || selectedEcho.contenttypeid,
+    displayTitle,
+    displayAddr
+  );
+
   // 1. TourAPI의 firstimage가 있으면 우선 사용
   const rawImage = detailData?.firstimage || selectedEcho.image;
   const hasOriginalImage = Boolean(
     rawImage &&
     rawImage.trim() !== '' &&
-    !rawImage.includes('/images/placeholders/')
+    !rawImage.includes('/images/placeholders/') &&
+    !rawImage.includes('/images/place/')
   );
 
   const fallbackResult = getTourFallbackImage(displayTitle, selectedEcho.contenttypeid);
   const displayImage = hasOriginalImage ? rawImage! : fallbackResult.image;
   const isPlaceholderImage = !hasOriginalImage;
+
+  // 2. Explainable Opportunity Score 계산
+  const scoreResult = calculateOpportunityScore({
+    firstimage: rawImage,
+    overview: displayOverview,
+    tel: displayTel,
+    homepage: homepageInfo.url || homepageInfo.label,
+    mapx: detailData?.mapx || selectedEcho.mapx,
+    mapy: detailData?.mapy || selectedEcho.mapy,
+    addr1: displayAddr,
+    contenttypeid: detailData?.contenttypeid || selectedEcho.contenttypeid,
+    hasOriginalImage,
+    imageSource: hasOriginalImage ? 'tourApi' : 'placeholder',
+  });
+
+  // 3. AI Opportunity Analyzer 실행 (requestId 레이스 커디션 방지 & 로딩 상태 처리)
+  useEffect(() => {
+    let isCancelled = false;
+
+    setAiLoading(true);
+
+    analyzeOpportunity({
+      contentid: selectedEcho.contentid || selectedEcho.id,
+      title: displayTitle,
+      overview: displayOverview,
+      addr1: displayAddr,
+      tel: displayTel,
+      homepage: homepageInfo.url || homepageInfo.label,
+      contenttypeid: detailData?.contenttypeid || selectedEcho.contenttypeid,
+      hasOriginalImage,
+      imageSource: hasOriginalImage ? 'tourApi' : 'placeholder',
+      tags: selectedEcho.tags,
+      score: scoreResult.score,
+      scoreBreakdown: scoreResult.breakdown,
+    }).then((result) => {
+      if (!isCancelled) {
+        setAiAnalysis(result);
+        setAiLoading(false);
+      }
+    }).catch(() => {
+      if (!isCancelled) {
+        setAiLoading(false);
+      }
+    });
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [selectedEcho.id, selectedEcho.contentid, displayTitle, displayOverview, displayAddr, displayTel, homepageInfo.url, homepageInfo.label, detailData?.contenttypeid, selectedEcho.contenttypeid, hasOriginalImage, selectedEcho.tags, scoreResult.score, scoreResult.breakdown]);
+
+  const levelBadgeStyle =
+    scoreResult.level === 'HIGH'
+      ? 'bg-neutral-900 text-white'
+      : scoreResult.level === 'MEDIUM'
+      ? 'bg-orange-500 text-white'
+      : 'bg-neutral-200 text-neutral-800';
+
+  const categoryTypeLabel = (typeId?: string) => {
+    switch (typeId) {
+      case '12': return '관광지';
+      case '14': return '문화시설';
+      case '15': return '축제/행사';
+      case '25': return '여행코스';
+      case '28': return '레포츠';
+      case '32': return '숙박';
+      case '38': return '쇼핑';
+      case '39': return '음식점';
+      default: return '관광자원';
+    }
+  };
 
   return (
     <div className="font-sans flex flex-col h-full overflow-hidden">
@@ -78,7 +168,12 @@ export default function OpportunityDetail({ selectedEcho }: OpportunityDetailPro
           </div>
           <span className="text-xs font-medium text-neutral-600">선택된 Opportunity</span>
           <span className="text-[10px] font-bold px-1.5 rounded-sm bg-neutral-100 text-neutral-900 tracking-wider">01</span>
-          <span className="text-[10px] font-bold px-1.5 rounded-sm bg-neutral-100 text-neutral-900 tracking-wider">HIGH</span>
+          <span className={`text-[10px] font-bold px-1.5 rounded-sm uppercase tracking-wider ${levelBadgeStyle}`}>
+            {scoreResult.level}
+          </span>
+          <span className="text-xs font-bold text-neutral-900 bg-neutral-100 px-2 py-0.5 rounded">
+            Score: {scoreResult.score}점
+          </span>
           
           <h2 className="text-xl font-bold text-neutral-900 tracking-tight ml-2">{displayTitle}</h2>
           
@@ -123,7 +218,7 @@ export default function OpportunityDetail({ selectedEcho }: OpportunityDetailPro
       </div>
 
       {/* Content Grid */}
-      <div className="flex-1 overflow-y-auto no-scrollbar pb-6">
+      <div className="pb-6 space-y-6">
         {detailLoading ? (
           <div className="flex flex-col items-center justify-center h-48 bg-neutral-50 rounded-xl border border-neutral-200 text-neutral-500 text-xs">
             <div className="w-5 h-5 border-2 border-neutral-900 border-t-transparent rounded-full animate-spin mb-2"></div>
@@ -149,7 +244,7 @@ export default function OpportunityDetail({ selectedEcho }: OpportunityDetailPro
                   onError={(e) => {
                     const target = e.currentTarget;
                     if (target.src.endsWith('/images/placeholders/default.jpg')) {
-                      return; // 무한 반복 방지
+                      return;
                     }
                     target.src = '/images/placeholders/default.jpg';
                   }}
@@ -237,6 +332,70 @@ export default function OpportunityDetail({ selectedEcho }: OpportunityDetailPro
                   </p>
                 </div>
               )}
+
+              {/* Opportunity Score 분석 근거 및 4대 영역 Breakdown */}
+              <div className="bg-neutral-50 rounded-lg p-3 border border-neutral-200 space-y-3">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-[11px] font-bold text-neutral-900 flex items-center">
+                    🎯 Opportunity Score 분석 ({scoreResult.score}점 / {scoreResult.level})
+                  </h4>
+                </div>
+
+                {/* 4대 영역 Breakdown Grid */}
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="bg-white p-2 rounded border border-neutral-200 flex flex-col">
+                    <div className="flex justify-between items-center text-[10px] mb-1">
+                      <span className="text-neutral-500 font-medium">데이터 완성도</span>
+                      <span className="font-bold text-neutral-900">{scoreResult.breakdown.dataCompleteness} / 25점</span>
+                    </div>
+                    <div className="w-full bg-neutral-100 h-1.5 rounded-full overflow-hidden">
+                      <div className="bg-blue-600 h-full rounded-full" style={{ width: `${(scoreResult.breakdown.dataCompleteness / 25) * 100}%` }}></div>
+                    </div>
+                  </div>
+
+                  <div className="bg-white p-2 rounded border border-neutral-200 flex flex-col">
+                    <div className="flex justify-between items-center text-[10px] mb-1">
+                      <span className="text-neutral-500 font-medium">상품화 가능성</span>
+                      <span className="font-bold text-neutral-900">{scoreResult.breakdown.productPotential} / 30점</span>
+                    </div>
+                    <div className="w-full bg-neutral-100 h-1.5 rounded-full overflow-hidden">
+                      <div className="bg-indigo-600 h-full rounded-full" style={{ width: `${(scoreResult.breakdown.productPotential / 30) * 100}%` }}></div>
+                    </div>
+                  </div>
+
+                  <div className="bg-white p-2 rounded border border-neutral-200 flex flex-col">
+                    <div className="flex justify-between items-center text-[10px] mb-1">
+                      <span className="text-neutral-500 font-medium">희소성·차별성</span>
+                      <span className="font-bold text-neutral-900">{scoreResult.breakdown.uniqueness} / 25점</span>
+                    </div>
+                    <div className="w-full bg-neutral-100 h-1.5 rounded-full overflow-hidden">
+                      <div className="bg-amber-500 h-full rounded-full" style={{ width: `${(scoreResult.breakdown.uniqueness / 25) * 100}%` }}></div>
+                    </div>
+                  </div>
+
+                  <div className="bg-white p-2 rounded border border-neutral-200 flex flex-col">
+                    <div className="flex justify-between items-center text-[10px] mb-1">
+                      <span className="text-neutral-500 font-medium">접근성·연계성</span>
+                      <span className="font-bold text-neutral-900">{scoreResult.breakdown.accessibility} / 20점</span>
+                    </div>
+                    <div className="w-full bg-neutral-100 h-1.5 rounded-full overflow-hidden">
+                      <div className="bg-emerald-600 h-full rounded-full" style={{ width: `${(scoreResult.breakdown.accessibility / 20) * 100}%` }}></div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="border-t border-neutral-200 pt-2">
+                  <p className="text-[10px] font-bold text-neutral-800 mb-1">주요 분석 리포트</p>
+                  <ul className="space-y-1">
+                    {scoreResult.reasons.map((reason, idx) => (
+                      <li key={idx} className="text-[10px] text-neutral-700 flex items-center">
+                        <span className="w-1.5 h-1.5 rounded-full bg-neutral-900 mr-2 shrink-0"></span>
+                        <span>{reason}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
 
               <div>
                 <h4 className="text-[11px] font-bold text-neutral-900 mb-2">왜 지금 기회인가?</h4>
@@ -380,6 +539,220 @@ export default function OpportunityDetail({ selectedEcho }: OpportunityDetailPro
 
           </div>
         )}
+
+        {/* AI Opportunity Analysis Section */}
+        {aiLoading ? (
+          <div className="mt-6 bg-neutral-900 rounded-xl p-6 text-white shadow-md border border-neutral-700 font-sans flex flex-col items-center justify-center space-y-2">
+            <div className="flex items-center space-x-2">
+              <div className="w-4 h-4 border-2 border-amber-400 border-t-transparent rounded-full animate-spin"></div>
+              <Sparkles className="w-4 h-4 text-amber-400 animate-pulse" />
+              <span className="text-xs font-bold text-amber-300">AI가 관광상품 기회를 분석하고 있습니다...</span>
+            </div>
+            <p className="text-[10px] text-neutral-400">TourAPI 자원 데이터 기반 Gemini AI 진단 중</p>
+          </div>
+        ) : aiAnalysis ? (
+          <div className="mt-6 bg-gradient-to-r from-neutral-900 via-neutral-800 to-neutral-900 rounded-xl p-4 text-white shadow-md border border-neutral-700 font-sans">
+            <div className="flex items-center justify-between mb-3 border-b border-neutral-700 pb-2">
+              <div className="flex items-center space-x-2">
+                <Sparkles className="w-4 h-4 text-amber-400" />
+                <h3 className="text-xs font-bold tracking-tight text-white uppercase">AI Opportunity Analysis</h3>
+              </div>
+              <div className="flex items-center space-x-2">
+                {aiAnalysis.engineType === 'gemini' ? (
+                  <span className="text-[9px] bg-gradient-to-r from-purple-600 to-indigo-600 text-white px-2 py-0.5 rounded-full font-bold shadow-sm flex items-center gap-1">
+                    <span>✨ Gemini AI 분석</span>
+                    {typeof aiAnalysis.confidence === 'number' && (
+                      <span className="text-[8px] bg-black/30 px-1.5 py-0.2 rounded text-purple-200">
+                        {aiAnalysis.confidence}%
+                      </span>
+                    )}
+                  </span>
+                ) : (
+                  <span className="text-[9px] bg-neutral-700 text-neutral-300 px-2 py-0.5 rounded-full font-medium">
+                    규칙 기반 분석
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {/* AI 요약 */}
+            <div className="bg-neutral-800/80 rounded-lg p-3 mb-3 border border-neutral-700/60">
+              <p className="text-[11px] text-neutral-200 leading-relaxed font-medium">
+                💡 <span className="font-bold text-white">AI 요약:</span> {aiAnalysis.summary}
+              </p>
+            </div>
+
+            {/* 강점 / 약점 / 기회 3컬럼 Grid */}
+            <div className="grid grid-cols-3 gap-3 mb-3">
+              {/* 강점 */}
+              <div className="bg-neutral-800/50 rounded-lg p-2.5 border border-neutral-700">
+                <div className="flex items-center space-x-1.5 mb-1.5">
+                  <ThumbsUp className="w-3 h-3 text-green-400" />
+                  <span className="text-[10px] font-bold text-green-400">강점 (Strengths)</span>
+                </div>
+                <ul className="space-y-1">
+                  {aiAnalysis.strengths.map((s, idx) => (
+                    <li key={idx} className="text-[9px] text-neutral-300 leading-tight flex items-start">
+                      <span className="mr-1 text-green-400">•</span>
+                      <span>{s}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+
+              {/* 약점 */}
+              <div className="bg-neutral-800/50 rounded-lg p-2.5 border border-neutral-700">
+                <div className="flex items-center space-x-1.5 mb-1.5">
+                  <AlertTriangle className="w-3 h-3 text-amber-400" />
+                  <span className="text-[10px] font-bold text-amber-400">약점 (Weaknesses)</span>
+                </div>
+                <ul className="space-y-1">
+                  {aiAnalysis.weaknesses.map((w, idx) => (
+                    <li key={idx} className="text-[9px] text-neutral-300 leading-tight flex items-start">
+                      <span className="mr-1 text-amber-400">•</span>
+                      <span>{w}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+
+              {/* 기회 */}
+              <div className="bg-neutral-800/50 rounded-lg p-2.5 border border-neutral-700">
+                <div className="flex items-center space-x-1.5 mb-1.5">
+                  <Lightbulb className="w-3 h-3 text-blue-400" />
+                  <span className="text-[10px] font-bold text-blue-400">기회 (Opportunities)</span>
+                </div>
+                <ul className="space-y-1">
+                  {aiAnalysis.opportunities.map((o, idx) => (
+                    <li key={idx} className="text-[9px] text-neutral-300 leading-tight flex items-start">
+                      <span className="mr-1 text-blue-400">•</span>
+                      <span>{o}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+
+            {/* 추천 상품 & 추천 타깃 */}
+            <div className="grid grid-cols-2 gap-3 pt-1 border-t border-neutral-700/60">
+              <div className="flex items-center space-x-2 bg-neutral-800 p-2 rounded-lg border border-neutral-700">
+                <Package className="w-4 h-4 text-purple-400 shrink-0" />
+                <div className="truncate">
+                  <p className="text-[8px] text-neutral-400 font-medium uppercase">추천 상품</p>
+                  <p className="text-[10px] font-bold text-purple-300 truncate">{aiAnalysis.recommendedProduct}</p>
+                </div>
+              </div>
+
+              <div className="flex items-center space-x-2 bg-neutral-800 p-2 rounded-lg border border-neutral-700">
+                <Target className="w-4 h-4 text-pink-400 shrink-0" />
+                <div className="truncate">
+                  <p className="text-[8px] text-neutral-400 font-medium uppercase">추천 타깃</p>
+                  <p className="text-[10px] font-bold text-pink-300 truncate">{aiAnalysis.recommendedTarget}</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : null}
+
+        {/* Related Tour Spots Section (연관 관광지) */}
+        <div className="mt-6 pt-4 border-t border-neutral-200 font-sans">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center space-x-2">
+              <Map className="w-4 h-4 text-neutral-900" />
+              <h3 className="text-xs font-bold text-neutral-900 tracking-tight">연관 관광지 (주변 명소 코스)</h3>
+              <span className="text-[10px] text-neutral-500 font-normal">반경 5km 내 연계 추천</span>
+            </div>
+            {relatedSpots.length > 0 && (
+              <span className="text-[10px] font-bold text-neutral-600 bg-neutral-100 px-2 py-0.5 rounded">
+                총 {relatedSpots.length}개 발견
+              </span>
+            )}
+          </div>
+
+          {relatedLoading ? (
+            /* Skeleton Loading */
+            <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
+              {[1, 2, 3, 4, 5, 6].map((i) => (
+                <div key={i} className="bg-neutral-100 rounded-xl p-2 animate-pulse space-y-2 border border-neutral-200">
+                  <div className="w-full aspect-square bg-neutral-200 rounded-lg"></div>
+                  <div className="h-3 bg-neutral-200 rounded w-3/4"></div>
+                  <div className="h-2 bg-neutral-200 rounded w-1/2"></div>
+                </div>
+              ))}
+            </div>
+          ) : relatedError || relatedSpots.length === 0 ? (
+            <div className="bg-neutral-50 border border-neutral-200 rounded-xl p-6 text-center text-xs text-neutral-500 font-medium">
+              📍 연관 관광지 정보가 없습니다.
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
+              {relatedSpots.map((spot, idx) => {
+                const echoCard = tourSpotToEchoCard(
+                  {
+                    contentid: spot.contentid,
+                    title: spot.title,
+                    addr1: spot.addr1 || '',
+                    firstimage: spot.firstimage,
+                    mapx: spot.mapx,
+                    mapy: spot.mapy,
+                    contenttypeid: spot.contenttypeid,
+                  },
+                  idx
+                );
+
+                return (
+                  <div
+                    key={spot.contentid}
+                    onClick={() => {
+                      if (onSelectEcho) {
+                        onSelectEcho(echoCard);
+                      }
+                    }}
+                    className="group bg-white rounded-xl border border-neutral-200 p-2 shadow-sm hover:border-neutral-900 hover:shadow-md transition-all cursor-pointer flex flex-col justify-between"
+                  >
+                    <div>
+                      {/* Image Area */}
+                      <div className="relative aspect-square w-full rounded-lg overflow-hidden mb-2 bg-neutral-100 border border-neutral-100">
+                        <img
+                          src={echoCard.image}
+                          alt={spot.title}
+                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                          referrerPolicy="no-referrer"
+                          onError={(e) => {
+                            const target = e.currentTarget;
+                            if (target.src.endsWith('/images/placeholders/default.jpg')) {
+                              return;
+                            }
+                            target.src = '/images/placeholders/default.jpg';
+                          }}
+                        />
+                        {spot.distanceText && (
+                          <span className="absolute bottom-1 right-1 bg-black/70 text-white text-[8px] font-bold px-1.5 py-0.5 rounded backdrop-blur-sm">
+                            {spot.distanceText}
+                          </span>
+                        )}
+                        <span className="absolute top-1 left-1 bg-neutral-900/80 text-white text-[7px] font-bold px-1 py-0.5 rounded">
+                          {categoryTypeLabel(spot.contenttypeid)}
+                        </span>
+                      </div>
+
+                      {/* Title */}
+                      <h4 className="text-[11px] font-bold text-neutral-900 truncate tracking-tight mb-0.5 group-hover:text-blue-600 transition-colors">
+                        {spot.title}
+                      </h4>
+                    </div>
+
+                    {/* Address / Distance */}
+                    <div className="flex items-center text-[9px] text-neutral-500 mt-1 truncate">
+                      <MapPin className="w-2.5 h-2.5 mr-0.5 shrink-0 text-neutral-400" />
+                      <span className="truncate">{spot.addr1 || '위치 정보 없음'}</span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

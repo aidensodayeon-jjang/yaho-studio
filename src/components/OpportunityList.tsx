@@ -84,7 +84,13 @@ export default function OpportunityList({
           cards.map((card, idx) => {
             const isSelected = selectedEcho?.id === card.id;
             const rank = String(idx + 1).padStart(2, '0');
-            const isHigh = card.score >= 90;
+            const level = card.level || (card.score >= 90 ? 'HIGH' : card.score >= 75 ? 'MEDIUM' : 'LOW');
+            const levelBadgeColor =
+              level === 'HIGH'
+                ? 'text-neutral-900 bg-neutral-100'
+                : level === 'MEDIUM'
+                ? 'text-orange-600 bg-orange-50'
+                : 'text-neutral-500 bg-neutral-100';
 
             return (
               <div
@@ -102,8 +108,8 @@ export default function OpportunityList({
 
                 <div className="flex items-center space-x-2 mb-2">
                   <span className="text-xs font-bold text-neutral-900">{rank}</span>
-                  <span className={`text-[10px] font-bold px-1.5 rounded-sm uppercase tracking-wider ${isHigh ? 'text-neutral-900 bg-neutral-100' : 'text-orange-500 bg-orange-50'}`}>
-                    {isHigh ? 'HIGH' : 'MEDIUM'}
+                  <span className={`text-[10px] font-bold px-1.5 rounded-sm uppercase tracking-wider ${levelBadgeColor}`}>
+                    {level}
                   </span>
                   {idx === 0 && (
                     <span className="text-[10px] font-bold px-1.5 rounded-sm bg-neutral-900 text-white uppercase tracking-wider">
@@ -126,11 +132,23 @@ export default function OpportunityList({
                 </div>
 
                 <div className="flex items-start justify-between mb-2 flex-1">
-                  <div className="flex flex-col">
-                    <div className="w-10 h-10 rounded-full border-2 border-neutral-900 flex items-center justify-center mb-0.5 relative">
+                  <div className="flex flex-col items-center group/score relative">
+                    <div className="w-10 h-10 rounded-full border-2 border-neutral-900 flex items-center justify-center mb-0.5 relative bg-white">
                       <span className="text-base font-bold text-neutral-900">{card.score}</span>
                     </div>
                     <span className="text-[7px] text-neutral-400 text-center leading-tight">Opportunity<br/>Score</span>
+
+                    {/* Tooltip explaining score reasons */}
+                    {card.scoreReasons && card.scoreReasons.length > 0 && (
+                      <div className="absolute bottom-full mb-1 left-0 z-50 hidden group-hover/score:block w-48 p-2 bg-neutral-900 text-white text-[9px] rounded-md shadow-lg leading-relaxed">
+                        <div className="font-bold border-b border-neutral-700 pb-1 mb-1">점수 산출 근거</div>
+                        <ul className="space-y-0.5">
+                          {card.scoreReasons.map((r, rIdx) => (
+                            <li key={rIdx} className="truncate">• {r}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
                   </div>
 
                   <div className="flex-1 px-2 space-y-1 mt-0.5">
@@ -148,7 +166,7 @@ export default function OpportunityList({
                     </div>
                     <div className="flex items-center justify-between text-[9px]">
                       <span className="text-neutral-500 flex items-center gap-0.5"><span className="w-3 text-center">💎</span> 상품/체험 부족</span>
-                      <span className="font-bold text-neutral-900">{isHigh ? '높음' : '보통'}</span>
+                      <span className="font-bold text-neutral-900">{level === 'HIGH' ? '높음' : '보통'}</span>
                     </div>
                   </div>
 

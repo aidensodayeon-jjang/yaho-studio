@@ -1,4 +1,5 @@
 import { Genre, EchoCard, FeedItem, Project, ChatMessage } from '../types';
+import { calculateOpportunityScore } from '../utils/calculateOpportunityScore';
 
 export const GENRES: Genre[] = [
   { id: 'kpop', name: 'K-POP', icon: '🎵' },
@@ -18,7 +19,7 @@ export const GENRES: Genre[] = [
   { id: 'activity', name: '액티비티', icon: '🪂' }
 ];
 
-export const ECHO_CARDS: EchoCard[] = [
+const RAW_ECHO_CARDS: EchoCard[] = [
   // --- K-POP GENRE ---
   {
     id: 'kpop-0',
@@ -466,6 +467,18 @@ export const ECHO_CARDS: EchoCard[] = [
     ]
   }
 ];
+
+export const ECHO_CARDS: EchoCard[] = RAW_ECHO_CARDS.map((card) => {
+  const result = calculateOpportunityScore(card);
+  return {
+    ...card,
+    score: result.score,
+    level: result.level,
+    scoreReasons: result.reasons,
+    scoreBreakdown: result.breakdown,
+  };
+});
+
 
 export const REALTIME_FEED: FeedItem[] = [
   {

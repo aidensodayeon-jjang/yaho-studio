@@ -1,3 +1,6 @@
+export * from './types/tourAnalytics';
+export * from './types/relatedTour';
+
 export interface Genre {
   id: string;
   name: string;
@@ -40,6 +43,20 @@ export interface EchoCard {
   imageSource?: 'tourApi' | 'placeholder';
   fallbackCategory?: string;
   fallbackLabel?: string;
+  level?: 'HIGH' | 'MEDIUM' | 'LOW';
+  scoreReasons?: string[];
+  scoreBreakdown?: {
+    dataCompleteness: number;
+    productPotential: number;
+    uniqueness: number;
+    accessibility: number;
+  };
+  dataQuality?: number;
+  analytics?: import('./types/tourAnalytics').TourAnalytics | null;
+  aiScore?: number | null;
+  totalScore?: number;
+  mapx?: string | number;
+  mapy?: string | number;
 }
 
 export interface FeedItem {
