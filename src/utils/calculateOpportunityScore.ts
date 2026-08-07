@@ -1,4 +1,5 @@
 import { TourAnalytics } from '../types/tourAnalytics';
+import { VisitorAnalyticsSummary } from '../api/visitorAnalyticsApi';
 
 export interface OpportunityScoreInput {
   title?: string;
@@ -12,6 +13,11 @@ export interface OpportunityScoreInput {
   contenttypeid?: string | number;
   hasOriginalImage?: boolean;
   imageSource?: 'tourApi' | 'placeholder';
+  visitorData?: VisitorAnalyticsSummary | null;
+  isCurrentSpotCentral?: boolean;
+  currentSpotRank?: number | null;
+  trendDirection?: 'RISING' | 'STABLE' | 'FALLING';
+  trendChangeRate?: number;
 }
 
 export interface OpportunityScoreBreakdown {
@@ -19,6 +25,9 @@ export interface OpportunityScoreBreakdown {
   productPotential: number; // B. 관광상품화 가능성 (최대 30점)
   uniqueness: number;       // C. 희소성·차별성 (최대 25점)
   accessibility: number;    // D. 접근성·연계 가능성 (최대 20점)
+  visitorScoreBonus?: number; // E. 빅데이터 지역 방문자 가감점 (최대 +15점)
+  centralTourBonus?: number;  // F. 기초지자체 중심 관광지 가점 (+3~+5점)
+  trendBonus?: number;        // G. 관광 트렌드/집중률 가점 (상승 추세: +5점, 안정 추세: +3점, 하락 추세/미제공: 0점)
 }
 
 export interface OpportunityScoreResult {
@@ -181,8 +190,56 @@ export function calculateOpportunityScore(item: OpportunityScoreInput): Opportun
   accessibility += accessKwAdd;
   accessibility = Math.min(20, accessibility);
 
+  // E. 빅데이터 지역 방문자 가감점 반영 (한국관광공사 DataLab API)
+  let visitorScoreBonus = 0;
+  if (item.visitorData) {
+    const { totalVisitors, foreignerRatio, outsiderRatio } = item.visitorData;
+    
+    // 1) 지역 총 방문자 규모 가점 (월 1,000만명 이상: +5, 월 500만명 이상: +3)
+    if (totalVisitors >= 10000000) {
+      visitorScoreBonus += 5;
+    } else if (totalVisitors >= 5000000) {
+      visitorScoreBonus += 3;
+    }
+
+    // 2) 외지인 방문 비율 가점 (25% 이상: +5, 20% 이상: +3)
+    if (outsiderRatio >= 25) {
+      visitorScoreBonus += 5;
+    } else if (outsiderRatio >= 20) {
+      visitorScoreBonus += 3;
+    }
+
+    // 3) 외국인 방문 비율 가점 (1.5% 이상: +5, 1.0% 이상: +3)
+    if (foreignerRatio >= 1.5) {
+      visitorScoreBonus += 5;
+    } else if (foreignerRatio >= 1.0) {
+      visitorScoreBonus += 3;
+    }
+  }
+
+  // F. 기초지자체 중심 관광지 가점 반영 (LocgoHubTarService1)
+  let centralTourBonus = 0;
+  if (item.isCurrentSpotCentral) {
+    if (item.currentSpotRank && item.currentSpotRank <= 3) {
+      centralTourBonus = 5;
+    } else {
+      centralTourBonus = 3;
+    }
+  }
+
+  // G. 관광지 집중률/트렌드 예측 가점 반영 (TatsCnctrRateService)
+  // - 상승 추세 (RISING): +5점
+  // - 안정 추세 (STABLE): +3점
+  // - 하락 추세 (FALLING) / 데이터 없음: 0점 (과도한 감점 금지)
+  let trendBonus = 0;
+  if (item.trendDirection === 'RISING') {
+    trendBonus = 5;
+  } else if (item.trendDirection === 'STABLE') {
+    trendBonus = 3;
+  }
+
   // 영역별 합계 및 0~100 clamp
-  const rawScore = dataCompleteness + productPotential + uniqueness + accessibility;
+  const rawScore = dataCompleteness + productPotential + uniqueness + accessibility + visitorScoreBonus + centralTourBonus + trendBonus;
   const score = Math.max(0, Math.min(100, rawScore));
 
   // 레벨 산정: HIGH(80 이상), MEDIUM(60~79), LOW(59 이하)
@@ -197,6 +254,22 @@ export function calculateOpportunityScore(item: OpportunityScoreInput): Opportun
 
   // 영역별 구체적 이유(reasons) 조합
   const reasons: string[] = [];
+
+  if (item.isCurrentSpotCentral) {
+    reasons.push(`해당 기초지자체 중심 관광지 ${item.currentSpotRank ? `${item.currentSpotRank}위` : '목록'}에 포함된 지역 앵커 스팟`);
+  }
+
+  if (item.visitorData) {
+    const { areaNm, totalVisitors, foreignerRatio, outsiderRatio } = item.visitorData;
+    if (totalVisitors >= 5000000) {
+      reasons.push(`${areaNm} 월 ${Math.round(totalVisitors / 10000).toLocaleString()}만 명 이상의 풍부한 유동 인구 유입`);
+    }
+    if (foreignerRatio >= 1.5) {
+      reasons.push(`외국인 방문 비율 ${foreignerRatio}%로 글로벌 타겟 상품화에 유리`);
+    } else if (outsiderRatio >= 20) {
+      reasons.push(`외지인 방문 비율 ${outsiderRatio}%로 광역 여행 상품 연계 용이`);
+    }
+  }
 
   if (productPotential >= 20) {
     reasons.push('축제·체험형 콘텐츠로 관광상품화 가능성이 높음');
@@ -224,8 +297,6 @@ export function calculateOpportunityScore(item: OpportunityScoreInput): Opportun
     reasons.push('공식 이미지와 풍부한 개요 정보를 갖춘 완성도 높은 데이터');
   } else if (!hasOriginalImg) {
     reasons.push('공식 이미지가 없어 홍보자료 보완이 필요함');
-  } else if (overview.length < 80) {
-    reasons.push('상세 설명(개요) 정보 보완 권장');
   }
 
   return {
@@ -240,6 +311,7 @@ export function calculateOpportunityScore(item: OpportunityScoreInput): Opportun
       productPotential,
       uniqueness,
       accessibility,
+      visitorScoreBonus,
     },
     reasons,
   };

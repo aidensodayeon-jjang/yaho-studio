@@ -153,19 +153,19 @@ export default function OpportunityList({
 
                   <div className="flex-1 px-2 space-y-1 mt-0.5">
                     <div className="flex items-center justify-between text-[9px]">
-                      <span className="text-neutral-500 flex items-center gap-0.5"><span className="w-3 text-center">📈</span> SNS 언급량</span>
+                      <span className="text-neutral-500 flex items-center gap-0.5"><span className="w-3 text-center">📈</span> SNS 언급량 <span className="text-[7px] text-neutral-400 bg-neutral-100 px-0.5 rounded">예시</span></span>
                       <span className="font-bold text-neutral-900">+{card.searchVolumeChange}%</span>
                     </div>
                     <div className="flex items-center justify-between text-[9px]">
-                      <span className="text-neutral-500 flex items-center gap-0.5"><span className="w-3 text-center">👥</span> 외국인 비율</span>
+                      <span className="text-neutral-500 flex items-center gap-0.5"><span className="w-3 text-center">👥</span> 외국인 비율 <span className="text-[7px] text-neutral-400 bg-neutral-100 px-0.5 rounded">예시</span></span>
                       <span className="font-bold text-neutral-900">+{card.postsChange}%</span>
                     </div>
                     <div className="flex items-center justify-between text-[9px]">
-                      <span className="text-neutral-500 flex items-center gap-0.5"><span className="w-3 text-center">⏱️</span> 평균 체류시간</span>
+                      <span className="text-neutral-500 flex items-center gap-0.5"><span className="w-3 text-center">⏱️</span> 평균 체류시간 <span className="text-[7px] text-neutral-400 bg-neutral-100 px-0.5 rounded">예시</span></span>
                       <span className="font-bold text-neutral-900">{41 + idx * 5}분</span>
                     </div>
                     <div className="flex items-center justify-between text-[9px]">
-                      <span className="text-neutral-500 flex items-center gap-0.5"><span className="w-3 text-center">💎</span> 상품/체험 부족</span>
+                      <span className="text-neutral-500 flex items-center gap-0.5"><span className="w-3 text-center">💎</span> 체험 부족도 <span className="text-[7px] text-neutral-400 bg-neutral-100 px-0.5 rounded">예시</span></span>
                       <span className="font-bold text-neutral-900">{level === 'HIGH' ? '높음' : '보통'}</span>
                     </div>
                   </div>

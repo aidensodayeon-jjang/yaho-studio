@@ -1,12 +1,16 @@
 import { useEffect, useState } from 'react';
-import { Bookmark, ChevronLeft, ChevronRight, Check, Phone, Globe, Info, Sparkles, Target, Package, ThumbsUp, AlertTriangle, Lightbulb, MapPin, Map } from 'lucide-react';
+import { Bookmark, ChevronLeft, ChevronRight, Check, Phone, Globe, Info, Sparkles, Target, Package, ThumbsUp, AlertTriangle, Lightbulb, MapPin, Map, Users, TrendingUp, UserCheck, Globe2 } from 'lucide-react';
 import { EchoCard } from '../types';
 import { useTourDetail } from '../hooks/useTourDetail';
 import { useRelatedTourSpots } from '../hooks/useRelatedTourSpots';
+import { useVisitorAnalytics } from '../hooks/useVisitorAnalytics';
+import { useCentralTourSpots } from '../hooks/useCentralTourSpots';
+import { useTourTrend } from '../hooks/useTourTrend';
 import { tourSpotToEchoCard } from '../utils/tourSpotAdapter';
 import { getTourFallbackImage } from '../utils/getTourFallbackImage';
 import { calculateOpportunityScore } from '../utils/calculateOpportunityScore';
 import { analyzeOpportunity, AIAnalysisResult } from '../ai/analyzeOpportunity';
+import { generateTourProduct, TourProductResult } from '../ai/generateTourProduct';
 
 // HTML 태그 제거용 순수 텍스트 정화 함수
 function stripHtmlTags(html?: string): string {
@@ -41,10 +45,11 @@ function extractHomepageUrl(html?: string): { url: string | null; label: string 
 
 interface OpportunityDetailProps {
   selectedEcho: EchoCard | null;
+  areaCode?: number;
   onSelectEcho?: (echo: EchoCard) => void;
 }
 
-export default function OpportunityDetail({ selectedEcho, onSelectEcho }: OpportunityDetailProps) {
+export default function OpportunityDetail({ selectedEcho, areaCode = 1, onSelectEcho }: OpportunityDetailProps) {
   if (!selectedEcho) return null;
 
   // TourAPI 상세 조회 hook 호출
@@ -53,13 +58,43 @@ export default function OpportunityDetail({ selectedEcho, onSelectEcho }: Opport
     selectedEcho.contenttypeid
   );
 
+  const displayTitle = detailData?.title || selectedEcho.title;
+  const displayAddr = detailData?.addr1 || selectedEcho.addr1 || '';
+
+  // 한국관광공사 DataLab 빅데이터 지역 방문자 분석 API 호출 (areaCode 및 주소 기반)
+  const currentAreaCode = areaCode || 1;
+  const { visitorData, loading: visitorLoading, error: visitorError } = useVisitorAnalytics(currentAreaCode, displayAddr);
+
+  // 한국관광공사 기초지자체 중심 관광지 API 호출 (LocgoHubTarService1)
+  const {
+    spots: centralSpots,
+    loading: centralLoading,
+    error: centralError,
+    signguNm: centralSignguNm,
+    isCurrentSpotCentral,
+    currentSpotRank,
+  } = useCentralTourSpots(currentAreaCode, displayAddr, displayTitle);
+
+  // 한국관광공사 관광지 집중률 방문자 추이 예측 API 호출 (TatsCnctrRateService)
+  const {
+    trendData,
+    loading: trendLoading,
+    error: trendError,
+    isEmpty: trendIsEmpty,
+  } = useTourTrend(currentAreaCode, displayAddr, displayTitle);
+
+  const activeTrend = trendData?.matchedSpotTrend || trendData?.topSpotTrend || null;
+
   const [aiAnalysis, setAiAnalysis] = useState<AIAnalysisResult | null>(null);
   const [aiLoading, setAiLoading] = useState<boolean>(false);
 
+  // AI 관광상품 기획안 상태
+  const [productResult, setProductResult] = useState<TourProductResult | null>(null);
+  const [productLoading, setProductLoading] = useState<boolean>(false);
+  const [activeProductContentId, setActiveProductContentId] = useState<string | null>(null);
+
   const tabs = ['기회 분석 요약', '방문자 분석', 'SNS 트렌드', '리뷰/평가', '경쟁 분석', '상품 아이디어', '예상 효과', '실행 가이드'];
 
-  const displayTitle = detailData?.title || selectedEcho.title;
-  const displayAddr = detailData?.addr1 || selectedEcho.addr1 || '';
   const displayTel = detailData?.tel ? stripHtmlTags(detailData.tel) : selectedEcho.tel;
   const displayOverview = detailData?.overview ? stripHtmlTags(detailData.overview) : selectedEcho.overview;
   const homepageInfo = extractHomepageUrl(detailData?.homepage || selectedEcho.homepage);
@@ -87,55 +122,121 @@ export default function OpportunityDetail({ selectedEcho, onSelectEcho }: Opport
   const fallbackResult = getTourFallbackImage(displayTitle, selectedEcho.contenttypeid);
   const displayImage = hasOriginalImage ? rawImage! : fallbackResult.image;
   const isPlaceholderImage = !hasOriginalImage;
+  const imageSource: 'tourApi' | 'placeholder' = hasOriginalImage ? 'tourApi' : 'placeholder';
 
-  // 2. Explainable Opportunity Score 계산
+  // 2. Opportunity Score 계산 (지역 트렌드/집중률 가점 + 중심성 가점 + 빅데이터 반영)
   const scoreResult = calculateOpportunityScore({
-    firstimage: rawImage,
+    title: displayTitle,
+    firstimage: displayImage,
     overview: displayOverview,
     tel: displayTel,
-    homepage: homepageInfo.url || homepageInfo.label,
+    homepage: homepageInfo.url || undefined,
     mapx: detailData?.mapx || selectedEcho.mapx,
     mapy: detailData?.mapy || selectedEcho.mapy,
     addr1: displayAddr,
     contenttypeid: detailData?.contenttypeid || selectedEcho.contenttypeid,
-    hasOriginalImage,
-    imageSource: hasOriginalImage ? 'tourApi' : 'placeholder',
+    hasOriginalImage: hasOriginalImage,
+    imageSource: imageSource,
+    visitorData: visitorData,
+    isCurrentSpotCentral: isCurrentSpotCentral,
+    currentSpotRank: currentSpotRank,
+    trendDirection: activeTrend?.trendDirection,
+    trendChangeRate: activeTrend?.changeRate,
   });
 
-  // 3. AI Opportunity Analyzer 실행 (requestId 레이스 커디션 방지 & 로딩 상태 처리)
+  // 3. AI Opportunity Analysis 호출 (Gemini & Rule-Based)
   useEffect(() => {
-    let isCancelled = false;
-
+    let isMounted = true;
     setAiLoading(true);
 
-    analyzeOpportunity({
-      contentid: selectedEcho.contentid || selectedEcho.id,
-      title: displayTitle,
-      overview: displayOverview,
-      addr1: displayAddr,
-      tel: displayTel,
-      homepage: homepageInfo.url || homepageInfo.label,
-      contenttypeid: detailData?.contenttypeid || selectedEcho.contenttypeid,
-      hasOriginalImage,
-      imageSource: hasOriginalImage ? 'tourApi' : 'placeholder',
-      tags: selectedEcho.tags,
-      score: scoreResult.score,
-      scoreBreakdown: scoreResult.breakdown,
-    }).then((result) => {
-      if (!isCancelled) {
-        setAiAnalysis(result);
-        setAiLoading(false);
+    async function loadAIAnalysis() {
+      try {
+        const res = await analyzeOpportunity({
+          contentid: displayContentId,
+          title: displayTitle,
+          overview: displayOverview,
+          addr1: displayAddr,
+          tel: displayTel,
+          homepage: homepageInfo.url || undefined,
+          contenttypeid: detailData?.contenttypeid || selectedEcho.contenttypeid,
+          hasOriginalImage: hasOriginalImage,
+          imageSource: imageSource,
+          tags: selectedEcho.tags,
+          score: scoreResult.score,
+          scoreBreakdown: scoreResult.breakdown,
+          areaName: visitorData?.areaNm || centralSignguNm || '해당 지역',
+          categoryName: selectedEcho.tags?.[0] || '관광',
+          visitorData: visitorData,
+          centralTourSpots: centralSpots.map((s) => s.hubTatsNm),
+          isCurrentSpotCentral: isCurrentSpotCentral,
+          currentSpotRank: currentSpotRank,
+          trendDirection: activeTrend?.trendDirection,
+          trendChangeRate: activeTrend?.changeRate,
+          avgRegionalRate: trendData?.avgRegionalRate,
+          isSpotSpecificTrend: Boolean(trendData?.isSpotSpecific),
+        });
+
+        if (isMounted) {
+          setAiAnalysis(res);
+          setAiLoading(false);
+        }
+      } catch {
+        if (isMounted) {
+          setAiLoading(false);
+        }
       }
-    }).catch(() => {
-      if (!isCancelled) {
-        setAiLoading(false);
-      }
-    });
+    }
+
+    loadAIAnalysis();
 
     return () => {
-      isCancelled = true;
+      isMounted = false;
     };
-  }, [selectedEcho.id, selectedEcho.contentid, displayTitle, displayOverview, displayAddr, displayTel, homepageInfo.url, homepageInfo.label, detailData?.contenttypeid, selectedEcho.contenttypeid, hasOriginalImage, selectedEcho.tags, scoreResult.score, scoreResult.breakdown]);
+  }, [displayContentId, displayTitle, displayOverview, displayAddr, visitorData, isCurrentSpotCentral, currentSpotRank, centralSpots, activeTrend, trendData]);
+
+  // 관광지가 변경될 때 이전 기획안 결과 리셋
+  useEffect(() => {
+    setProductResult(null);
+    setProductLoading(false);
+    setActiveProductContentId(null);
+  }, [displayContentId]);
+
+  // AI 관광상품 기획안 생성 버튼 클릭 핸들러 (requestId 기법 적용)
+  const handleGenerateProduct = async () => {
+    const targetId = displayContentId || displayTitle;
+    setActiveProductContentId(targetId);
+    setProductLoading(true);
+    setProductResult(null);
+
+    try {
+      const res = await generateTourProduct({
+        contentid: displayContentId,
+        title: displayTitle,
+        addr1: displayAddr,
+        contenttypeid: detailData?.contenttypeid || selectedEcho.contenttypeid,
+        overview: displayOverview,
+        score: scoreResult.score,
+        scoreBreakdown: scoreResult.breakdown,
+        aiAnalysis: aiAnalysis,
+        relatedSpots: relatedSpots,
+        visitorData: visitorData,
+        centralTourSpots: centralSpots.map((s) => s.hubTatsNm),
+        isCurrentSpotCentral: isCurrentSpotCentral,
+        currentSpotRank: currentSpotRank,
+        trendDirection: activeTrend?.trendDirection,
+        trendChangeRate: activeTrend?.changeRate,
+        hasOriginalImage: hasOriginalImage,
+      });
+
+      // 빠른 상태 변경에 따른 requestId 검증
+      if (activeProductContentId === targetId || displayContentId === targetId) {
+        setProductResult(res);
+        setProductLoading(false);
+      }
+    } catch {
+      setProductLoading(false);
+    }
+  };
 
   const levelBadgeStyle =
     scoreResult.level === 'HIGH'
@@ -333,7 +434,7 @@ export default function OpportunityDetail({ selectedEcho, onSelectEcho }: Opport
                 </div>
               )}
 
-              {/* Opportunity Score 분석 근거 및 4대 영역 Breakdown */}
+              {/* Opportunity Score 분석 근거 및 관광지 자체 점수 + 지역 빅데이터 가점 Breakdown */}
               <div className="bg-neutral-50 rounded-lg p-3 border border-neutral-200 space-y-3">
                 <div className="flex items-center justify-between">
                   <h4 className="text-[11px] font-bold text-neutral-900 flex items-center">
@@ -341,45 +442,94 @@ export default function OpportunityDetail({ selectedEcho, onSelectEcho }: Opport
                   </h4>
                 </div>
 
+                {/* 관광지 자체 점수 vs 빅데이터/트렌드 가점 총점 공식 */}
+                <div className="bg-white p-2.5 rounded-lg border border-neutral-200 text-[10px] space-y-1">
+                  <div className="flex items-center justify-between font-bold text-neutral-800">
+                    <span>• 관광지 자체 기본 점수</span>
+                    <span>{scoreResult.breakdown.dataCompleteness + scoreResult.breakdown.productPotential + scoreResult.breakdown.uniqueness + scoreResult.breakdown.accessibility}점</span>
+                  </div>
+                  <div className="flex items-center justify-between text-emerald-700 font-bold">
+                    <span>• 지역 방문자 유동인구 가점</span>
+                    <span>+{scoreResult.breakdown.visitorScoreBonus || 0}점</span>
+                  </div>
+                  <div className="flex items-center justify-between text-blue-700 font-bold">
+                    <span>• 지역 중심 관광지 가점</span>
+                    <span>+{scoreResult.breakdown.centralTourBonus || 0}점</span>
+                  </div>
+                  <div className="flex items-center justify-between text-indigo-700 font-bold">
+                    <span>• 관광 트렌드/집중률 가점</span>
+                    <span>+{scoreResult.breakdown.trendBonus || 0}점</span>
+                  </div>
+                  <div className="border-t border-dashed border-neutral-200 pt-1.5 flex items-center justify-between font-extrabold text-neutral-900 text-xs">
+                    <span>= 최종 Opportunity Score</span>
+                    <span className="text-neutral-900 font-mono text-sm">{scoreResult.score}점</span>
+                  </div>
+                </div>
+
                 {/* 4대 영역 Breakdown Grid */}
-                <div className="grid grid-cols-2 gap-2">
-                  <div className="bg-white p-2 rounded border border-neutral-200 flex flex-col">
-                    <div className="flex justify-between items-center text-[10px] mb-1">
-                      <span className="text-neutral-500 font-medium">데이터 완성도</span>
-                      <span className="font-bold text-neutral-900">{scoreResult.breakdown.dataCompleteness} / 25점</span>
+                <div className="space-y-1.5">
+                  <p className="text-[9.5px] font-bold text-neutral-600">관광지 자체 기본 점수 (최대 100점 항목)</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="bg-white p-2 rounded border border-neutral-200 flex flex-col">
+                      <div className="flex justify-between items-center text-[10px] mb-1">
+                        <span className="text-neutral-500 font-medium">데이터 완성도</span>
+                        <span className="font-bold text-neutral-900">{scoreResult.breakdown.dataCompleteness} / 25점</span>
+                      </div>
+                      <div className="w-full bg-neutral-100 h-1.5 rounded-full overflow-hidden">
+                        <div className="bg-blue-600 h-full rounded-full" style={{ width: `${(scoreResult.breakdown.dataCompleteness / 25) * 100}%` }}></div>
+                      </div>
                     </div>
-                    <div className="w-full bg-neutral-100 h-1.5 rounded-full overflow-hidden">
-                      <div className="bg-blue-600 h-full rounded-full" style={{ width: `${(scoreResult.breakdown.dataCompleteness / 25) * 100}%` }}></div>
+
+                    <div className="bg-white p-2 rounded border border-neutral-200 flex flex-col">
+                      <div className="flex justify-between items-center text-[10px] mb-1">
+                        <span className="text-neutral-500 font-medium">상품화 가능성</span>
+                        <span className="font-bold text-neutral-900">{scoreResult.breakdown.productPotential} / 30점</span>
+                      </div>
+                      <div className="w-full bg-neutral-100 h-1.5 rounded-full overflow-hidden">
+                        <div className="bg-indigo-600 h-full rounded-full" style={{ width: `${(scoreResult.breakdown.productPotential / 30) * 100}%` }}></div>
+                      </div>
+                    </div>
+
+                    <div className="bg-white p-2 rounded border border-neutral-200 flex flex-col">
+                      <div className="flex justify-between items-center text-[10px] mb-1">
+                        <span className="text-neutral-500 font-medium">희소성·차별성</span>
+                        <span className="font-bold text-neutral-900">{scoreResult.breakdown.uniqueness} / 25점</span>
+                      </div>
+                      <div className="w-full bg-neutral-100 h-1.5 rounded-full overflow-hidden">
+                        <div className="bg-amber-500 h-full rounded-full" style={{ width: `${(scoreResult.breakdown.uniqueness / 25) * 100}%` }}></div>
+                      </div>
+                    </div>
+
+                    <div className="bg-white p-2 rounded border border-neutral-200 flex flex-col">
+                      <div className="flex justify-between items-center text-[10px] mb-1">
+                        <span className="text-neutral-500 font-medium">접근성·연계성</span>
+                        <span className="font-bold text-neutral-900">{scoreResult.breakdown.accessibility} / 20점</span>
+                      </div>
+                      <div className="w-full bg-neutral-100 h-1.5 rounded-full overflow-hidden">
+                        <div className="bg-emerald-600 h-full rounded-full" style={{ width: `${(scoreResult.breakdown.accessibility / 20) * 100}%` }}></div>
+                      </div>
                     </div>
                   </div>
+                </div>
 
-                  <div className="bg-white p-2 rounded border border-neutral-200 flex flex-col">
-                    <div className="flex justify-between items-center text-[10px] mb-1">
-                      <span className="text-neutral-500 font-medium">상품화 가능성</span>
-                      <span className="font-bold text-neutral-900">{scoreResult.breakdown.productPotential} / 30점</span>
-                    </div>
-                    <div className="w-full bg-neutral-100 h-1.5 rounded-full overflow-hidden">
-                      <div className="bg-indigo-600 h-full rounded-full" style={{ width: `${(scoreResult.breakdown.productPotential / 30) * 100}%` }}></div>
-                    </div>
+                {/* 지역 빅데이터 가점 Breakdown */}
+                <div className="bg-emerald-50/70 p-2.5 rounded-lg border border-emerald-200/80 space-y-1">
+                  <div className="flex justify-between items-center text-[10px] font-bold text-emerald-900">
+                    <span>지역 빅데이터 가점 세부 내역</span>
+                    <span>총 가점 +{scoreResult.breakdown.visitorScoreBonus || 0}점</span>
                   </div>
-
-                  <div className="bg-white p-2 rounded border border-neutral-200 flex flex-col">
-                    <div className="flex justify-between items-center text-[10px] mb-1">
-                      <span className="text-neutral-500 font-medium">희소성·차별성</span>
-                      <span className="font-bold text-neutral-900">{scoreResult.breakdown.uniqueness} / 25점</span>
+                  <div className="text-[9px] text-emerald-800 space-y-0.5 pt-0.5">
+                    <div className="flex justify-between">
+                      <span>• 지역 방문 규모 (유동인구)</span>
+                      <span>{visitorData && visitorData.totalVisitors >= 10000000 ? '+5점 (월 1천만↑)' : visitorData && visitorData.totalVisitors >= 5000000 ? '+3점 (월 500만↑)' : '+0점'}</span>
                     </div>
-                    <div className="w-full bg-neutral-100 h-1.5 rounded-full overflow-hidden">
-                      <div className="bg-amber-500 h-full rounded-full" style={{ width: `${(scoreResult.breakdown.uniqueness / 25) * 100}%` }}></div>
+                    <div className="flex justify-between">
+                      <span>• 외지인 비율</span>
+                      <span>{visitorData && visitorData.outsiderRatio >= 25 ? '+5점 (25%↑)' : visitorData && visitorData.outsiderRatio >= 20 ? '+3점 (20%↑)' : '+0점'}</span>
                     </div>
-                  </div>
-
-                  <div className="bg-white p-2 rounded border border-neutral-200 flex flex-col">
-                    <div className="flex justify-between items-center text-[10px] mb-1">
-                      <span className="text-neutral-500 font-medium">접근성·연계성</span>
-                      <span className="font-bold text-neutral-900">{scoreResult.breakdown.accessibility} / 20점</span>
-                    </div>
-                    <div className="w-full bg-neutral-100 h-1.5 rounded-full overflow-hidden">
-                      <div className="bg-emerald-600 h-full rounded-full" style={{ width: `${(scoreResult.breakdown.accessibility / 20) * 100}%` }}></div>
+                    <div className="flex justify-between">
+                      <span>• 외국인 비율</span>
+                      <span>{visitorData && visitorData.foreignerRatio >= 1.5 ? '+5점 (1.5%↑)' : visitorData && visitorData.foreignerRatio >= 1.0 ? '+3점 (1.0%↑)' : '+0점'}</span>
                     </div>
                   </div>
                 </div>
@@ -396,6 +546,251 @@ export default function OpportunityDetail({ selectedEcho, onSelectEcho }: Opport
                   </ul>
                 </div>
               </div>
+
+              {/* 한국관광공사 DataLab 지역별 방문자 분석 Card */}
+              <div className="bg-neutral-50 rounded-xl p-3.5 border border-neutral-200 flex flex-col gap-2.5">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-1.5">
+                    <Users className="w-4 h-4 text-neutral-900" />
+                    <h4 className="text-xs font-bold text-neutral-900">
+                      {visitorData ? `${visitorData.areaNm} 행정구역 전체 방문자 분석` : '지역 방문자 분석'}
+                    </h4>
+                    <span className="text-[9px] bg-neutral-900 text-white px-1.5 py-0.5 rounded font-medium">한국관광 데이터랩</span>
+                  </div>
+                  {visitorData && (
+                    <span className="text-[10px] text-neutral-500 font-mono">
+                      기준: {visitorData.baseYm}
+                    </span>
+                  )}
+                </div>
+
+                {visitorLoading ? (
+                  /* Skeleton UI */
+                  <div className="animate-pulse space-y-2 py-1">
+                    <div className="h-4 bg-neutral-200 rounded w-3/4"></div>
+                    <div className="grid grid-cols-3 gap-2">
+                      <div className="h-12 bg-neutral-200 rounded"></div>
+                      <div className="h-12 bg-neutral-200 rounded"></div>
+                      <div className="h-12 bg-neutral-200 rounded"></div>
+                    </div>
+                  </div>
+                ) : visitorError ? (
+                  /* API Error Message */
+                  <div className="flex items-center justify-center py-4 text-xs text-neutral-500 bg-white rounded-lg border border-neutral-200">
+                    <Info className="w-4 h-4 text-neutral-400 mr-1.5" />
+                    <span>방문자 데이터를 불러올 수 없습니다.</span>
+                  </div>
+                ) : visitorData ? (
+                  /* Actual Data Card */
+                  <div className="space-y-2">
+                    <p className="text-[11px] font-medium text-neutral-700">
+                      📍 <span className="font-bold text-neutral-900">{visitorData.areaNm}</span> 지역 전체 유동인구{' '}
+                      <span className="font-extrabold text-neutral-900">{visitorData.totalVisitors.toLocaleString()}명</span>
+                    </p>
+                    <div className="grid grid-cols-3 gap-2">
+                      <div className="bg-white p-2 rounded-lg border border-neutral-200 flex flex-col items-center">
+                        <span className="text-[9px] text-neutral-500 mb-0.5 flex items-center gap-0.5">
+                          <Users className="w-3 h-3 text-blue-500" /> 지역 전체 유동인구
+                        </span>
+                        <span className="text-xs font-extrabold text-neutral-900">
+                          {visitorData.totalVisitors >= 10000
+                            ? `${(visitorData.totalVisitors / 10000).toFixed(1)}만`
+                            : visitorData.totalVisitors.toLocaleString()}명
+                        </span>
+                      </div>
+                      <div className="bg-white p-2 rounded-lg border border-neutral-200 flex flex-col items-center">
+                        <span className="text-[9px] text-neutral-500 mb-0.5 flex items-center gap-0.5">
+                          <Globe2 className="w-3 h-3 text-purple-500" /> 외국인 비율
+                        </span>
+                        <span className="text-xs font-extrabold text-purple-700">
+                          {visitorData.foreignerVisitors >= 10000
+                            ? `${(visitorData.foreignerVisitors / 10000).toFixed(1)}만`
+                            : visitorData.foreignerVisitors.toLocaleString()}명
+                        </span>
+                        <span className="text-[8px] text-neutral-400 mt-0.5">({visitorData.foreignerRatio}%)</span>
+                      </div>
+                    </div>
+                    {/* 오해 방지 안내 문구 */}
+                    <p className="text-[9.5px] text-neutral-500 bg-white p-1.5 rounded border border-neutral-200 leading-tight">
+                      ℹ️ 선택한 관광지 단독 방문자 수가 아니라, 해당 관광지가 위치한 <span className="font-bold text-neutral-700">{visitorData.areaNm} 행정구역 전체</span>의 방문 통계입니다.
+                    </p>
+                  </div>
+                ) : null}
+              </div>
+
+              {/* 한국관광공사 DataLab 기초지자체 중심 관광지 Card (LocgoHubTarService1) */}
+              <div className="bg-neutral-50 rounded-xl p-3.5 border border-neutral-200 flex flex-col gap-2.5">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-1.5">
+                    <Target className="w-4 h-4 text-neutral-900" />
+                    <h4 className="text-xs font-bold text-neutral-900">
+                      {centralSignguNm} 지역 중심 관광지
+                    </h4>
+                    <span className="text-[9px] bg-neutral-900 text-white px-1.5 py-0.5 rounded font-medium">티맵 모빌리티 빅데이터</span>
+                  </div>
+                  {centralSpots.length > 0 && (
+                    <span className="text-[10px] text-neutral-500 font-mono">
+                      기준: {centralSpots[0].baseYm}
+                    </span>
+                  )}
+                </div>
+
+                {/* 선택 관광지 비교 배너 */}
+                <div className={`p-2.5 rounded-lg border text-xs leading-relaxed flex items-start gap-2 ${
+                  isCurrentSpotCentral
+                    ? 'bg-emerald-50 border-emerald-300 text-emerald-900'
+                    : 'bg-amber-50/80 border-amber-200 text-amber-900'
+                }`}>
+                  <Sparkles className={`w-4 h-4 shrink-0 mt-0.5 ${isCurrentSpotCentral ? 'text-emerald-600' : 'text-amber-600'}`} />
+                  <div>
+                    {isCurrentSpotCentral ? (
+                      <p className="font-bold">
+                        이 관광지는 <span className="underline decoration-2 font-extrabold">{centralSignguNm}</span>의 중심 관광지 목록({currentSpotRank ? `${currentSpotRank}위` : '포함'})에 해당합니다.
+                      </p>
+                    ) : (
+                      <p className="font-medium">
+                        현재 지역의 대표 중심 관광지는 아니지만, 새로운 관광상품 후보로 분석할 수 있습니다.
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                {centralLoading ? (
+                  <div className="animate-pulse space-y-2 py-1">
+                    <div className="h-4 bg-neutral-200 rounded w-1/2"></div>
+                    <div className="space-y-1.5">
+                      <div className="h-8 bg-neutral-200 rounded"></div>
+                      <div className="h-8 bg-neutral-200 rounded"></div>
+                    </div>
+                  </div>
+                ) : centralError ? (
+                  <div className="flex items-center justify-center py-3 text-xs text-neutral-500 bg-white rounded-lg border border-neutral-200">
+                    <Info className="w-4 h-4 text-neutral-400 mr-1.5" />
+                    <span>지역 중심 관광지 데이터를 불러올 수 없습니다.</span>
+                  </div>
+                ) : centralSpots.length === 0 ? (
+                  <div className="flex items-center justify-center py-3 text-xs text-neutral-500 bg-white rounded-lg border border-neutral-200">
+                    <Info className="w-4 h-4 text-neutral-400 mr-1.5" />
+                    <span>이 지역의 중심 관광지 정보가 제공되지 않습니다.</span>
+                  </div>
+                ) : (
+                  <div className="space-y-1.5">
+                    <p className="text-[10px] text-neutral-500 font-medium">
+                      {centralSignguNm} 상위 앵커 관광지 (최대 5개)
+                    </p>
+                    <div className="space-y-1 bg-white p-2 rounded-lg border border-neutral-200 max-h-48 overflow-y-auto no-scrollbar">
+                      {centralSpots.slice(0, 5).map((spot) => (
+                        <div
+                          key={spot.hubTatsCd || spot.hubRank}
+                          className="flex items-center justify-between py-1 px-1.5 rounded hover:bg-neutral-50 text-[10.5px]"
+                        >
+                          <div className="flex items-center space-x-2 truncate">
+                            <span className="w-4 h-4 rounded-full bg-neutral-900 text-white text-[9px] font-extrabold flex items-center justify-center shrink-0">
+                              {spot.hubRank}
+                            </span>
+                            <span className="font-bold text-neutral-900 truncate">{spot.hubTatsNm}</span>
+                            <span className="text-[9px] text-neutral-400 bg-neutral-100 px-1 rounded shrink-0">
+                              {spot.hubCtgryMclsNm || spot.hubCtgryLclsNm}
+                            </span>
+                          </div>
+                          <span className="text-[9.5px] text-neutral-500 font-mono shrink-0 ml-1">
+                            {spot.signguNm}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* 한국관광공사 DataLab 관광지 집중률 방문자 추이 예측 Card (TatsCnctrRateService) */}
+              <div className="bg-neutral-50 rounded-xl p-3.5 border border-neutral-200 flex flex-col gap-2.5">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-1.5">
+                    <TrendingUp className="w-4 h-4 text-neutral-900" />
+                    <h4 className="text-xs font-bold text-neutral-900">
+                      관광 트렌드 및 방문 추이 예측
+                    </h4>
+                    <span className="text-[9px] bg-neutral-900 text-white px-1.5 py-0.5 rounded font-medium">KT 빅데이터 AI 예측</span>
+                  </div>
+                  {activeTrend && (
+                    <span className="text-[9px] text-neutral-500 font-mono">
+                      {activeTrend.forecastPeriod}
+                    </span>
+                  )}
+                </div>
+
+                {trendLoading ? (
+                  <div className="animate-pulse space-y-2 py-1">
+                    <div className="h-4 bg-neutral-200 rounded w-2/3"></div>
+                    <div className="grid grid-cols-3 gap-2">
+                      <div className="h-10 bg-neutral-200 rounded"></div>
+                      <div className="h-10 bg-neutral-200 rounded"></div>
+                      <div className="h-10 bg-neutral-200 rounded"></div>
+                    </div>
+                  </div>
+                ) : trendError ? (
+                  <div className="flex items-center justify-center py-3 text-xs text-neutral-500 bg-white rounded-lg border border-neutral-200">
+                    <Info className="w-4 h-4 text-neutral-400 mr-1.5" />
+                    <span>관광 트렌드 데이터를 불러올 수 없습니다.</span>
+                  </div>
+                ) : trendIsEmpty || !activeTrend ? (
+                  <div className="flex items-center justify-center py-3 text-xs text-neutral-500 bg-white rounded-lg border border-neutral-200">
+                    <Info className="w-4 h-4 text-neutral-400 mr-1.5" />
+                    <span>이 관광지 또는 지역의 관광 트렌드 정보가 제공되지 않습니다.</span>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {/* 데이터 단위 안내 */}
+                    <div className="flex items-center justify-between text-[10.5px]">
+                      <span className="font-bold text-neutral-900">
+                        {trendData?.isSpotSpecific ? `🎯 [${activeTrend.spotName}] 핀포인트 추이` : `📍 [${centralSignguNm}] 지역 전체 관광 트렌드`}
+                      </span>
+                      <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${
+                        activeTrend.trendDirection === 'RISING'
+                          ? 'bg-green-100 text-green-800 border border-green-300'
+                          : activeTrend.trendDirection === 'FALLING'
+                          ? 'bg-rose-100 text-rose-800 border border-rose-300'
+                          : 'bg-blue-100 text-blue-800 border border-blue-300'
+                      }`}>
+                        {activeTrend.trendDirection === 'RISING' ? '📈 상승 추세' : activeTrend.trendDirection === 'FALLING' ? '📉 하락 추세' : '➡️ 안정 추세'}
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-3 gap-2">
+                      <div className="bg-white p-2 rounded-lg border border-neutral-200 flex flex-col items-center">
+                        <span className="text-[9px] text-neutral-500 mb-0.5">현재 집중률</span>
+                        <span className="text-xs font-extrabold text-neutral-900">{activeTrend.currentRate}</span>
+                        <span className="text-[8px] text-neutral-400 mt-0.5"> (상대 지수)</span>
+                      </div>
+                      <div className="bg-white p-2 rounded-lg border border-neutral-200 flex flex-col items-center">
+                        <span className="text-[9px] text-neutral-500 mb-0.5">30일후 예측 집중률</span>
+                        <span className="text-xs font-extrabold text-neutral-900">{activeTrend.predictedRate}</span>
+                        <span className={`text-[8px] font-bold mt-0.5 ${activeTrend.changeRate >= 0 ? 'text-green-600' : 'text-rose-600'}`}>
+                          ({activeTrend.changeRate >= 0 ? '+' : ''}{activeTrend.changeRate}%)
+                        </span>
+                      </div>
+                      <div className="bg-white p-2 rounded-lg border border-neutral-200 flex flex-col items-center">
+                        <span className="text-[9px] text-neutral-500 mb-0.5">집중도 등급</span>
+                        <span className={`text-xs font-extrabold ${activeTrend.cnctrGrade === 'HIGH' ? 'text-rose-600' : activeTrend.cnctrGrade === 'MEDIUM' ? 'text-amber-600' : 'text-blue-600'}`}>
+                          {activeTrend.cnctrGrade === 'HIGH' ? '혼잡' : activeTrend.cnctrGrade === 'MEDIUM' ? '보통' : '여유'}
+                        </span>
+                        <span className="text-[8px] text-neutral-400 mt-0.5">(평균 {activeTrend.avgRate})</span>
+                      </div>
+                    </div>
+
+                    {/* 지역 단위 안내 문구 (단독 매칭이 아닐 때) */}
+                    {!trendData?.isSpotSpecific && (
+                      <p className="text-[9.5px] text-neutral-500 bg-white p-1.5 rounded border border-neutral-200 leading-tight">
+                        ℹ️ 이 데이터는 선택 관광지 단독이 아니라 해당 <span className="font-bold text-neutral-700">{centralSignguNm} 지역 전체</span>의 관광 추세 예측 데이터입니다.
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
+
+
+
 
               <div>
                 <h4 className="text-[11px] font-bold text-neutral-900 mb-2">왜 지금 기회인가?</h4>
@@ -417,10 +812,12 @@ export default function OpportunityDetail({ selectedEcho, onSelectEcho }: Opport
               </div>
 
               <div>
-                <h4 className="text-[11px] font-bold text-neutral-900 mb-2">데이터 요약</h4>
+                <h4 className="text-[11px] font-bold text-neutral-900 mb-2 flex items-center gap-1.5">
+                  데이터 요약 <span className="text-[9px] font-normal text-neutral-500 bg-neutral-100 px-1.5 py-0.5 rounded border border-neutral-200">데모 예시 지표</span>
+                </h4>
                 <div className="grid grid-cols-3 gap-2">
                   <div>
-                    <p className="text-[9px] text-neutral-500 mb-1">SNS 언급량 추이</p>
+                    <p className="text-[9px] text-neutral-500 mb-1 flex items-center gap-1">SNS 언급량 추이 <span className="text-[7px] text-neutral-400">예시</span></p>
                     <p className="text-sm font-bold text-green-600 mb-1">+{selectedEcho.searchVolumeChange}%</p>
                     <div className="w-full h-6 bg-neutral-100 rounded relative overflow-hidden">
                       <svg className="absolute inset-0 w-full h-full" viewBox="0 0 100 30" preserveAspectRatio="none">
@@ -430,14 +827,14 @@ export default function OpportunityDetail({ selectedEcho, onSelectEcho }: Opport
                     </div>
                   </div>
                   <div>
-                    <p className="text-[9px] text-neutral-500 mb-1">외국인 비율</p>
+                    <p className="text-[9px] text-neutral-500 mb-1 flex items-center gap-1">외국인 비율 <span className="text-[7px] text-neutral-400">예시</span></p>
                     <p className="text-sm font-bold text-green-600 mb-1">{selectedEcho.postsChange}%</p>
                     <div className="w-full flex justify-center mt-1">
                       <div className="w-8 h-8 rounded-full border-[3px] border-neutral-200 border-r-green-500 border-t-green-500 transform rotate-45"></div>
                     </div>
                   </div>
                   <div>
-                    <p className="text-[9px] text-neutral-500 mb-1">평균 체류시간</p>
+                    <p className="text-[9px] text-neutral-500 mb-1 flex items-center gap-1">평균 체류시간 <span className="text-[7px] text-neutral-400">예시</span></p>
                     <p className="text-sm font-bold text-green-600 mb-1">{selectedEcho.stayTimeMinutes || 41}<span className="text-[9px] text-neutral-500 ml-0.5">분</span></p>
                     <div className="flex items-end h-6 gap-1 mt-1 justify-center">
                       <div className="w-2.5 h-3 bg-neutral-200 rounded-t"></div>
@@ -634,7 +1031,7 @@ export default function OpportunityDetail({ selectedEcho, onSelectEcho }: Opport
             </div>
 
             {/* 추천 상품 & 추천 타깃 */}
-            <div className="grid grid-cols-2 gap-3 pt-1 border-t border-neutral-700/60">
+            <div className="grid grid-cols-2 gap-3 pt-1 border-t border-neutral-700/60 mb-3">
               <div className="flex items-center space-x-2 bg-neutral-800 p-2 rounded-lg border border-neutral-700">
                 <Package className="w-4 h-4 text-purple-400 shrink-0" />
                 <div className="truncate">
@@ -651,8 +1048,168 @@ export default function OpportunityDetail({ selectedEcho, onSelectEcho }: Opport
                 </div>
               </div>
             </div>
+
+            {/* AI 관광상품 기획 생성 트리거 버튼 */}
+            {!productResult && !productLoading && (
+              <div className="pt-2 border-t border-neutral-700/50 flex justify-end">
+                <button
+                  onClick={handleGenerateProduct}
+                  className="bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white font-bold text-xs px-4 py-2 rounded-lg shadow-md flex items-center space-x-1.5 transition-all transform active:scale-95"
+                >
+                  <Sparkles className="w-4 h-4 text-white" />
+                  <span>✨ AI 관광상품 기획안 생성하기</span>
+                </button>
+              </div>
+            )}
           </div>
         ) : null}
+
+        {/* AI 관광상품 기획안 생성 로딩 UI */}
+        {productLoading && (
+          <div className="mt-4 bg-gradient-to-r from-neutral-900 via-neutral-800 to-neutral-900 rounded-xl p-6 text-white shadow-lg border border-amber-500/40 flex flex-col items-center justify-center space-y-2.5">
+            <div className="flex items-center space-x-2">
+              <div className="w-5 h-5 border-2 border-amber-400 border-t-transparent rounded-full animate-spin"></div>
+              <Sparkles className="w-5 h-5 text-amber-400 animate-pulse" />
+              <span className="text-sm font-bold text-amber-300">AI가 관광상품 기획안을 생성하고 있습니다...</span>
+            </div>
+            <p className="text-xs text-neutral-400">TourAPI 연관 관광지 및 빅데이터 기반 코스 설계 중</p>
+          </div>
+        )}
+
+        {/* AI 관광상품 기획안 결과 UI Card */}
+        {productResult && (
+          <div className="mt-4 bg-white rounded-xl p-5 border border-neutral-300 shadow-md font-sans space-y-4">
+            {/* Header */}
+            <div className="flex items-center justify-between border-b border-neutral-200 pb-3">
+              <div className="flex items-center space-x-2">
+                <div className="w-7 h-7 rounded-lg bg-neutral-900 text-amber-400 flex items-center justify-center font-bold text-sm">
+                  ✨
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-neutral-900 leading-tight">{productResult.productName}</h3>
+                  <p className="text-xs text-neutral-500">{productResult.oneLineIntro}</p>
+                </div>
+              </div>
+              <div className="flex items-center space-x-2">
+                {productResult.generatedBy === 'gemini' ? (
+                  <span className="text-[10px] bg-purple-100 text-purple-800 border border-purple-300 px-2 py-0.5 rounded-full font-bold">
+                    ✨ Gemini AI 기획
+                  </span>
+                ) : (
+                  <span className="text-[10px] bg-neutral-100 text-neutral-800 border border-neutral-300 px-2 py-0.5 rounded-full font-medium">
+                    ⚙️ 규칙 기반 기획
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {/* 상품 정보 메타 데이터 Grid */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5">
+              <div className="bg-neutral-50 p-2.5 rounded-lg border border-neutral-200">
+                <p className="text-[9px] text-neutral-400 font-medium">추천 타깃</p>
+                <p className="text-xs font-bold text-neutral-800 truncate">{productResult.targetCustomer}</p>
+              </div>
+              <div className="bg-neutral-50 p-2.5 rounded-lg border border-neutral-200">
+                <p className="text-[9px] text-neutral-400 font-medium">예상 소요시간</p>
+                <p className="text-xs font-bold text-neutral-800 truncate">{productResult.duration}</p>
+              </div>
+              <div className="bg-neutral-50 p-2.5 rounded-lg border border-neutral-200">
+                <p className="text-[9px] text-neutral-400 font-medium">추천 계절</p>
+                <p className="text-xs font-bold text-neutral-800 truncate">{productResult.recommendedSeason}</p>
+              </div>
+              <div className="bg-neutral-50 p-2.5 rounded-lg border border-neutral-200">
+                <p className="text-[9px] text-neutral-400 font-medium">권장 가격대</p>
+                <p className="text-xs font-bold text-emerald-700 truncate">{productResult.priceGuide}</p>
+              </div>
+            </div>
+
+            {/* 추천 코스 (실제 TourAPI 연관 관광지만 활용) */}
+            <div className="bg-neutral-50 rounded-lg p-3.5 border border-neutral-200 space-y-2">
+              <h4 className="text-xs font-bold text-neutral-900 flex items-center gap-1.5">
+                🗺️ 추천 투어 코스 <span className="text-[9.5px] font-normal text-neutral-500">(실제 TourAPI 연관 관광지 기반)</span>
+              </h4>
+              <div className="space-y-2">
+                {productResult.course.map((step) => (
+                  <div key={step.order} className="bg-white p-2.5 rounded-lg border border-neutral-200 flex items-start space-x-3">
+                    <span className="w-5 h-5 rounded-full bg-neutral-900 text-white text-xs font-extrabold flex items-center justify-center shrink-0 mt-0.5">
+                      {step.order}
+                    </span>
+                    <div>
+                      <h5 className="text-xs font-bold text-neutral-900">{step.placeName}</h5>
+                      <p className="text-[11px] text-neutral-600 leading-snug mt-0.5">{step.description}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* 핵심 체험 & 마케팅 포인트 & SNS 홍보 문구 Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div className="bg-neutral-50 p-3 rounded-lg border border-neutral-200 space-y-1.5">
+                <h4 className="text-xs font-bold text-neutral-900">✨ 핵심 체험</h4>
+                <ul className="space-y-1">
+                  {productResult.keyExperience.map((exp, idx) => (
+                    <li key={idx} className="text-[11px] text-neutral-700 flex items-center">
+                      <span className="w-1.5 h-1.5 rounded-full bg-amber-500 mr-2 shrink-0"></span>
+                      <span>{exp}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+
+              <div className="bg-neutral-50 p-3 rounded-lg border border-neutral-200 space-y-1.5">
+                <h4 className="text-xs font-bold text-neutral-900">🎯 마케팅 셀링 포인트</h4>
+                <ul className="space-y-1">
+                  {productResult.marketingPoints.map((mp, idx) => (
+                    <li key={idx} className="text-[11px] text-neutral-700 flex items-center">
+                      <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 mr-2 shrink-0"></span>
+                      <span>{mp}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+
+            {/* SNS 홍보 문구 & 해시태그 */}
+            <div className="bg-indigo-50/60 p-3.5 rounded-lg border border-indigo-200/80 space-y-2">
+              <h4 className="text-xs font-bold text-indigo-950 flex items-center gap-1">
+                📱 SNS 홍보 카피 & 해시태그
+              </h4>
+              <p className="text-xs text-indigo-900 font-medium bg-white p-2 rounded border border-indigo-200 leading-relaxed">
+                {productResult.snsCopy}
+              </p>
+              <div className="flex flex-wrap gap-1.5">
+                {productResult.hashtags.map((tag) => (
+                  <span key={tag} className="text-[10px] text-indigo-700 bg-white px-2 py-0.5 rounded border border-indigo-200 font-mono">
+                    {tag}
+                  </span>
+                ))}
+              </div>
+            </div>
+
+            {/* 운영 방식 및 주의사항 */}
+            <div className="bg-neutral-50 p-3.5 rounded-lg border border-neutral-200 space-y-2 text-xs">
+              <h4 className="font-bold text-neutral-900">⚙️ 운영 방식 & 주의사항</h4>
+              <p className="text-neutral-700 text-[11px] leading-relaxed mb-2">{productResult.operationPlan}</p>
+              <ul className="space-y-1 border-t border-neutral-200 pt-2">
+                {productResult.cautions.map((c, idx) => (
+                  <li key={idx} className="text-[10px] text-neutral-500 flex items-center">
+                    <span className="mr-1.5">⚠️</span>
+                    <span>{c}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            {/* 데이터 신뢰성 안내 */}
+            <div className="bg-neutral-100 p-2.5 rounded-lg border border-neutral-200 text-center">
+              <p className="text-[10px] text-neutral-500 leading-tight">
+                ℹ️ 본 기획안은 한국관광공사 OpenAPI 데이터와 YAHO Opportunity 분석을 기반으로 생성된 초안입니다. 운영 전 현장 확인과 가격 검토가 필요합니다.
+              </p>
+            </div>
+          </div>
+        )}
+
 
         {/* Related Tour Spots Section (연관 관광지) */}
         <div className="mt-6 pt-4 border-t border-neutral-200 font-sans">

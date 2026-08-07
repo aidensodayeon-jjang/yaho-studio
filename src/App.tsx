@@ -210,7 +210,7 @@ export default function App() {
                 />
               </div>
               <div className="bg-white rounded-2xl p-5 border border-neutral-200 shadow-sm">
-                <OpportunityDetail selectedEcho={selectedEcho} onSelectEcho={handleSelectEcho} />
+                <OpportunityDetail selectedEcho={selectedEcho} areaCode={areaCode} onSelectEcho={handleSelectEcho} />
               </div>
             </div>
           ) : (
