@@ -4,20 +4,18 @@ import OpportunityDetail from './components/OpportunityDetail';
 import { Search, TrendingUp, Sparkles, KeyRound } from 'lucide-react';
 import { useTourData } from './hooks/useTourData';
 import { useNaverTrends } from './hooks/useNaverTrends';
+import { useYouTubePopularTrends } from './hooks/useYouTubePopularTrends';
 import { EchoCard } from './types';
 
 export default function App() {
   const [areaCode, setAreaCode] = useState<number | undefined>(undefined);
   const [searchInput, setSearchInput] = useState('');
-  const [keyword, setKeyword] = useState('러닝');
-  const [selectedKeyword, setSelectedKeyword] = useState('러닝');
+  const [keyword, setKeyword] = useState('거제 야호');
+  const [selectedKeyword, setSelectedKeyword] = useState('거제 야호');
 
-  const { popularTrends, risingTrends, loading: trendsLoading, hasKeys: hasNaverKeys } = useNaverTrends();
-  const [activeTrendTab, setActiveTrendTab] = useState<'rising' | 'popular'>('rising');
+  const { trends: autoDiscoveredTrends, loading: popularYtLoading } = useYouTubePopularTrends();
   const { data: tourData, loading: tourLoading, error: tourError, isNationwideFallback } = useTourData(areaCode || 1, 12, keyword);
   const [selectedEcho, setSelectedEcho] = useState<EchoCard | null>(null);
-
-  const activeTrends = activeTrendTab === 'rising' ? risingTrends : popularTrends;
 
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -118,74 +116,38 @@ export default function App() {
           </div>
         </section>
 
-        {/* 1. Naver DataLab Real Trend Section (인기 TOP 10 & 급상승 TOP 10) */}
+        {/* 1. YouTube Popular Auto-Discovered Trend Section */}
         <section className="space-y-3">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-neutral-200/80 pb-2.5">
-            <div className="flex items-center space-x-3">
-              <div className="flex items-center space-x-1.5">
-                <TrendingUp className="w-4 h-4 text-neutral-900" />
-                <h2 className="text-sm font-black text-neutral-900 tracking-tight">
-                  NAVER 실증 관광 트렌드
-                </h2>
-              </div>
-
-              {/* Tab Selector */}
-              <div className="inline-flex bg-neutral-100 p-0.5 rounded-lg text-xs font-bold">
-                <button
-                  onClick={() => setActiveTrendTab('rising')}
-                  className={`px-3 py-1 rounded-md transition-all ${
-                    activeTrendTab === 'rising'
-                      ? 'bg-neutral-900 text-white shadow-sm'
-                      : 'text-neutral-500 hover:text-neutral-900'
-                  }`}
-                >
-                  🔥 급상승 TOP 10
-                </button>
-                <button
-                  onClick={() => setActiveTrendTab('popular')}
-                  className={`px-3 py-1 rounded-md transition-all ${
-                    activeTrendTab === 'popular'
-                      ? 'bg-neutral-900 text-white shadow-sm'
-                      : 'text-neutral-500 hover:text-neutral-900'
-                  }`}
-                >
-                  👑 인기 TOP 10
-                </button>
-              </div>
+            <div className="flex items-center space-x-2">
+              <Sparkles className="w-4 h-4 text-amber-500" />
+              <h2 className="text-sm font-black text-neutral-900 tracking-tight">
+                지금 포착된 관광 트렌드 TOP 10
+              </h2>
             </div>
 
             <span className="text-[10px] text-neutral-400 font-medium">
-              검색 트렌드 지수 · NAVER DataLab
+              YouTube 인기 콘텐츠 기반 · NAVER 검색 관심도 검증
             </span>
           </div>
 
-          {trendsLoading ? (
+          {popularYtLoading ? (
             <div className="bg-white rounded-2xl p-6 border border-neutral-200 text-center text-xs text-neutral-400">
-              네이버 데이터랩 실증 트렌드 지수(인기/급상승 TOP 10)를 실시간 계산하고 있습니다...
+              YouTube 한국 인기 동영상 50개를 실시간 분석하여 신규 밈/관광 트렌드를 발견하고 있습니다...
             </div>
-          ) : !hasNaverKeys ? (
-            <div className="bg-amber-50 rounded-2xl p-4 border border-amber-200 text-xs text-amber-800 flex items-start space-x-3">
-              <KeyRound className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-              <div>
-                <p className="font-bold">네이버 API 키 미설정 안내</p>
-                <p className="text-[11px] text-amber-700 mt-0.5">
-                  <code className="bg-amber-100 px-1 rounded font-mono">.env.local</code>에 <code className="bg-amber-100 px-1 rounded font-mono">NAVER_CLIENT_ID</code> 및 <code className="bg-amber-100 px-1 rounded font-mono">NAVER_CLIENT_SECRET</code>을 설정하면 네이버 데이터랩 인기/급상승 TOP 10 실시간 순위가 자동 산출됩니다.
-                </p>
-              </div>
-            </div>
-          ) : activeTrends.length === 0 ? (
+          ) : autoDiscoveredTrends.length === 0 ? (
             <div className="bg-white rounded-2xl p-6 border border-neutral-200 text-center text-xs text-neutral-500">
-              현재 포착된 {activeTrendTab === 'rising' ? '급상승' : '인기'} 트렌드가 없습니다.
+              YouTube 트렌드 데이터를 불러오지 못했습니다.
             </div>
           ) : (
             <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5">
-              {activeTrends.map((t, idx) => {
-                const isSelected = selectedKeyword === t.keyword;
+              {autoDiscoveredTrends.map((t, idx) => {
+                const isSelected = selectedKeyword === t.title;
                 const rankNum = String(idx + 1).padStart(2, '0');
                 return (
                   <div
-                    key={t.keyword}
-                    onClick={() => handleSelectTrendKeyword(t.keyword)}
+                    key={t.title}
+                    onClick={() => handleSelectTrendKeyword(t.title)}
                     className={`bg-white rounded-2xl border p-3 cursor-pointer transition-all flex flex-col justify-between space-y-2 ${
                       isSelected
                         ? 'border-neutral-900 ring-2 ring-neutral-900 bg-neutral-50/40 shadow-sm'
@@ -194,21 +156,21 @@ export default function App() {
                   >
                     <div className="flex items-center justify-between">
                       <span className="text-[10px] font-mono font-extrabold text-neutral-400">{rankNum}</span>
-                      <span className="text-[9px] font-bold text-neutral-500 bg-neutral-100 px-1.5 py-0.5 rounded">
-                        {activeTrendTab === 'rising' ? 'RISING' : 'POPULAR'}
+                      <span className="text-[8.5px] font-bold text-red-600 bg-red-50 px-1.5 py-0.5 rounded border border-red-100">
+                        YT DISCOVERY
                       </span>
                     </div>
 
                     <div>
-                      <h3 className="text-xs font-black text-neutral-900 truncate mb-0.5">{t.keyword}</h3>
+                      <h3 className="text-xs font-black text-neutral-900 truncate mb-1">{t.title}</h3>
                       <div className="space-y-0.5">
-                        <div className="flex items-center justify-between text-[10px]">
-                          <span className="text-neutral-400">NAVER</span>
-                          <span className="font-extrabold text-green-600">↑ {t.changeRate}%</span>
-                        </div>
                         <div className="flex items-center justify-between text-[9.5px]">
                           <span className="text-neutral-400">YouTube</span>
-                          <span className="font-bold text-red-500">Viral ↑</span>
+                          <span className="font-bold text-red-500">VIRAL ↑</span>
+                        </div>
+                        <div className="flex items-center justify-between text-[9.5px]">
+                          <span className="text-neutral-400">NAVER</span>
+                          <span className="font-extrabold text-green-600">↑ {t.naverSignal.changeRate}%</span>
                         </div>
                       </div>
                     </div>
