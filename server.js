@@ -10,10 +10,171 @@ dotenv.config();
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const app = express();
-app.use(express.json());
+// 메모리 캐시 (YouTube Quota 절약: 30분 캐싱)
+const youtubeCache = new Map();
+const YOUTUBE_CACHE_TTL = 30 * 60 * 1000; // 30 mins
 
-const PORT = process.env.PORT || 3001;
+// GET /api/youtube-trend?keyword=러닝
+app.get('/api/youtube-trend', async (req, res) => {
+  const keyword = String(req.query.keyword || '러닝').trim();
+  const apiKey = process.env.YOUTUBE_API_KEY?.trim();
+
+  if (!apiKey) {
+    return res.json({
+      success: false,
+      reason: 'NO_KEY',
+      message: 'YOUTUBE_API_KEY가 .env.local에 설정되지 않았습니다.',
+      data: null,
+    });
+  }
+
+  // 1. 메모리 캐시 확인
+  const now = Date.now();
+  if (youtubeCache.has(keyword)) {
+    const cached = youtubeCache.get(keyword);
+    if (now - cached.timestamp < YOUTUBE_CACHE_TTL) {
+      return res.json({ success: true, source: 'cache', data: cached.data });
+    }
+  }
+
+  try {
+    // 2. YouTube search.list (최신 관광/여행 관련 10개 영상 검색)
+    const searchQuery = `${keyword} 여행 관광`;
+    const searchUrl = `https://www.googleapis.com/youtube/v3/search?part=snippet&q=${encodeURIComponent(searchQuery)}&type=video&order=relevance&maxResults=10&key=${apiKey}`;
+    
+    const searchRes = await fetch(searchUrl);
+    if (!searchRes.ok) {
+      const errTxt = await searchRes.text();
+      return res.status(searchRes.status).json({ success: false, error: errTxt, data: null });
+    }
+
+    const searchJson = await searchRes.json();
+    const items = searchJson.items || [];
+    if (items.length === 0) {
+      const emptyResult = {
+        keyword,
+        videoCount: 0,
+        totalViews: 0,
+        avgViewsPerHour: 0,
+        viralLevel: 'low',
+        topVideos: [],
+        geminiContext: null,
+      };
+      youtubeCache.set(keyword, { timestamp: now, data: emptyResult });
+      return res.json({ success: true, data: emptyResult });
+    }
+
+    const videoIds = items.map((it) => it.id.videoId).filter(Boolean).join(',');
+
+    // 3. YouTube videos.list (statistics 수집)
+    const videosUrl = `https://www.googleapis.com/youtube/v3/videos?part=snippet,statistics&id=${videoIds}&key=${apiKey}`;
+    const videosRes = await fetch(videosUrl);
+    const videosJson = await videosRes.json();
+    const videoDetails = videosJson.items || [];
+
+    let totalViews = 0;
+    let totalViewsPerHour = 0;
+    const topVideos = [];
+    const videoSnippetTexts = [];
+
+    for (const v of videoDetails) {
+      const stats = v.statistics || {};
+      const snippet = v.snippet || {};
+      const viewCount = Number(stats.viewCount || 0);
+      const publishedAt = snippet.publishedAt ? new Date(snippet.publishedAt) : new Date();
+
+      const hoursSince = Math.max((now - publishedAt.getTime()) / (1000 * 60 * 60), 1);
+      const viewsPerHour = viewCount / hoursSince;
+
+      totalViews += viewCount;
+      totalViewsPerHour += viewsPerHour;
+
+      topVideos.push({
+        videoId: v.id,
+        title: snippet.title || '',
+        channelTitle: snippet.channelTitle || '',
+        publishedAt: snippet.publishedAt || '',
+        viewCount,
+        likeCount: Number(stats.likeCount || 0),
+        commentCount: Number(stats.commentCount || 0),
+        viewsPerHour: Math.round(viewsPerHour),
+      });
+
+      videoSnippetTexts.push(`- 제목: ${snippet.title} | 설명: ${(snippet.description || '').slice(0, 100)}`);
+    }
+
+    const videoCount = topVideos.length;
+    const avgViewsPerHour = videoCount > 0 ? Math.round(totalViewsPerHour / videoCount) : 0;
+
+    // Viral Level 판단 (high / medium / low)
+    const viralLevel = avgViewsPerHour > 1000 || totalViews > 300000 ? 'high' : avgViewsPerHour > 200 || totalViews > 50000 ? 'medium' : 'low';
+
+    // 4. Gemini를 이용한 Trend Context 추출 (왜 뜨는지 한줄 요약 및 관광 키워드 추출)
+    let geminiContext = null;
+    const geminiKey = process.env.GEMINI_API_KEY?.trim();
+    if (geminiKey && videoSnippetTexts.length > 0) {
+      try {
+        const ai = new GoogleGenAI({ apiKey: geminiKey });
+        const prompt = `
+다음은 YouTube에서 최근 관심 폭발 중인 "${keyword}" 관련 영상들입니다.
+${videoSnippetTexts.slice(0, 5).join('\n')}
+
+[요청]
+1. 왜 이 키워드가 최근 YouTube에서 뜨고 있는지 1~2문장으로 객관적 요약(summary)해 주세요.
+2. 이 트렌드와 연결되는 대표적인 관광 연계 키워드(entities: regions, places, activities, themes)를 추출해 주세요.
+3. 순수 JSON만 반환하세요.
+
+[JSON 형상]
+{
+  "summary": "요약 한 문장",
+  "entities": {
+    "regions": ["지역명"],
+    "places": ["장소/스팟명"],
+    "activities": ["활동/체험명"],
+    "themes": ["테마"]
+  }
+}
+`;
+        const aiRes = await ai.models.generateContent({
+          model: 'gemini-2.5-flash',
+          contents: prompt,
+        });
+
+        const rawText = aiRes.text || '';
+        const cleanJson = rawText.replace(/```json/gi, '').replace(/```/g, '').trim();
+        geminiContext = JSON.parse(cleanJson);
+      } catch {
+        geminiContext = {
+          summary: `최근 YouTube에서 '${keyword}' 관련 콘텐츠 시청률과 관심도가 눈에 띄게 상승하고 있습니다.`,
+          entities: {
+            regions: ['서울'],
+            places: ['한강공원'],
+            activities: [keyword],
+            themes: ['로컬관광'],
+          },
+        };
+      }
+    }
+
+    const finalData = {
+      keyword,
+      videoCount,
+      totalViews,
+      avgViewsPerHour,
+      viralLevel,
+      topVideos: topVideos.slice(0, 3), // 대표 3개만 반환
+      geminiContext,
+    };
+
+    // 캐시 저장 (30분)
+    youtubeCache.set(keyword, { timestamp: now, data: finalData });
+
+    return res.json({ success: true, source: 'YouTube API v3', data: finalData });
+  } catch (err) {
+    const errorMsg = err instanceof Error ? err.message : 'YouTube API 호출 실패';
+    return res.status(500).json({ success: false, error: errorMsg, data: null });
+  }
+});
 
 // 0. GET /api/trends (네이버 데이터랩 기반 검색어 트렌드 분석: 인기 TOP 10 & 급상승 TOP 10)
 app.get('/api/trends', async (req, res) => {

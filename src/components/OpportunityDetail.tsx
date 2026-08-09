@@ -9,6 +9,7 @@ import { useTourTrend } from '../hooks/useTourTrend';
 import { calculateOpportunityScore } from '../utils/calculateOpportunityScore';
 import { analyzeOpportunity, AIAnalysisResult } from '../ai/analyzeOpportunity';
 import { generateProductIdeas, generateTourProduct, ProductIdea, TourProductResult } from '../ai/generateTourProduct';
+import { useYouTubeTrend } from '../hooks/useYouTubeTrend';
 
 function stripHtmlTags(html?: string): string {
   if (!html) return '';
@@ -32,6 +33,9 @@ export default function OpportunityDetail({ selectedEcho, areaCode = 1, onSelect
   const displayTitle = detailData?.title || selectedEcho.title;
   const displayAddr = detailData?.addr1 || selectedEcho.addr1 || '';
   const displayOverview = detailData?.overview ? stripHtmlTags(detailData.overview) : selectedEcho.overview;
+
+  // YouTube Social Trend Hook 호출
+  const { data: ytData } = useYouTubeTrend(displayTitle);
 
   const currentAreaCode = areaCode || 1;
   const { visitorData } = useVisitorAnalytics(currentAreaCode, displayAddr);
@@ -243,6 +247,35 @@ export default function OpportunityDetail({ selectedEcho, areaCode = 1, onSelect
           </p>
         </div>
       </div>
+
+      {/* YouTube Social Viral Context (대표 영상 3개 근거) */}
+      {ytData && ytData.topVideos && ytData.topVideos.length > 0 && (
+        <div className="bg-red-50/60 rounded-2xl p-4 border border-red-100 space-y-2 text-xs">
+          <div className="flex items-center justify-between">
+            <span className="font-extrabold text-red-700 flex items-center gap-1.5">
+              <span>▶</span> YouTube 바이럴 대표 콘텐츠 (실제 반응 근거)
+            </span>
+            <span className="text-[10px] text-red-500 font-bold bg-white px-2 py-0.5 rounded border border-red-200">
+              Viral {ytData.viralLevel.toUpperCase()} (시간당 {ytData.avgViewsPerHour.toLocaleString()}회 시청)
+            </span>
+          </div>
+
+          <div className="space-y-1.5 pt-1">
+            {ytData.topVideos.slice(0, 3).map((vid) => (
+              <div key={vid.videoId} className="bg-white p-2.5 rounded-xl border border-red-100/80 flex items-center justify-between text-[11px]">
+                <div className="min-w-0 flex-1 mr-2">
+                  <p className="font-bold text-neutral-900 truncate">{vid.title}</p>
+                  <p className="text-[10px] text-neutral-400 truncate">{vid.channelTitle} · {new Date(vid.publishedAt).toLocaleDateString()}</p>
+                </div>
+                <div className="text-right shrink-0">
+                  <span className="font-mono font-bold text-red-600">{(vid.viewCount / 10000).toFixed(1)}만회</span>
+                  <span className="text-[9px] text-neutral-400 block">누적 조회</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* [2. AI 상품 아이디어 만들기] */}
       <div className="pt-2 border-t border-neutral-100 space-y-4">

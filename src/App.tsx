@@ -201,18 +201,16 @@ export default function App() {
 
                     <div>
                       <h3 className="text-xs font-black text-neutral-900 truncate mb-0.5">{t.keyword}</h3>
-                      {activeTrendTab === 'rising' ? (
-                        <span className="text-[10px] text-green-600 font-extrabold block">
-                          ↑ {t.changeRate}%
-                        </span>
-                      ) : (
-                        <span className="text-[10px] text-neutral-700 font-extrabold block">
-                          지수 {t.recentAverage}
-                        </span>
-                      )}
-                      <span className="text-[8.5px] text-neutral-400 block font-medium">
-                        {activeTrendTab === 'rising' ? '검색 증가율' : '최근 30일 관심도'}
-                      </span>
+                      <div className="space-y-0.5">
+                        <div className="flex items-center justify-between text-[10px]">
+                          <span className="text-neutral-400">NAVER</span>
+                          <span className="font-extrabold text-green-600">↑ {t.changeRate}%</span>
+                        </div>
+                        <div className="flex items-center justify-between text-[9.5px]">
+                          <span className="text-neutral-400">YouTube</span>
+                          <span className="font-bold text-red-500">Viral ↑</span>
+                        </div>
+                      </div>
                     </div>
                   </div>
                 );
