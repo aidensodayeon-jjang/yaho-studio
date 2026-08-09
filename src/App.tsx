@@ -1,29 +1,31 @@
 import React, { useState, useEffect } from 'react';
 import OpportunityList from './components/OpportunityList';
 import OpportunityDetail from './components/OpportunityDetail';
-import { Search, Sparkles } from 'lucide-react';
+import { Search, TrendingUp, Sparkles, KeyRound } from 'lucide-react';
 import { useTourData } from './hooks/useTourData';
+import { useNaverTrends } from './hooks/useNaverTrends';
 import { EchoCard } from './types';
 
 export default function App() {
   const [areaCode, setAreaCode] = useState<number | undefined>(undefined);
   const [searchInput, setSearchInput] = useState('');
-  const [keyword, setKeyword] = useState('');
-  const [selectedKeyword, setSelectedKeyword] = useState('');
-  
-  const { data: tourData, loading, error, isNationwideFallback } = useTourData(areaCode || 1, 12, keyword);
-  const [selectedEcho, setSelectedEcho] = useState<EchoCard | null>(null);
+  const [keyword, setKeyword] = useState('러닝');
+  const [selectedKeyword, setSelectedKeyword] = useState('러닝');
 
-  const popularKeywords = ['러닝', '야간관광', '미식', '웰니스', 'K-POP', '가족체험', '성수동', '전통문화'];
+  const { trends, loading: trendsLoading, hasKeys: hasNaverKeys } = useNaverTrends();
+  const { data: tourData, loading: tourLoading, error: tourError, isNationwideFallback } = useTourData(areaCode || 1, 12, keyword);
+  const [selectedEcho, setSelectedEcho] = useState<EchoCard | null>(null);
 
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const trimmed = searchInput.trim();
-    setKeyword(trimmed);
-    setSelectedKeyword(trimmed);
+    if (trimmed) {
+      setKeyword(trimmed);
+      setSelectedKeyword(trimmed);
+    }
   };
 
-  const handleKeywordClick = (kw: string) => {
+  const handleSelectTrendKeyword = (kw: string) => {
     setSearchInput(kw);
     setKeyword(kw);
     setSelectedKeyword(kw);
@@ -31,8 +33,8 @@ export default function App() {
 
   const handleClearSearch = () => {
     setSearchInput('');
-    setKeyword('');
-    setSelectedKeyword('');
+    setKeyword('러닝');
+    setSelectedKeyword('러닝');
   };
 
   const regions = [
@@ -81,7 +83,7 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-[#fafafa] text-neutral-900 font-sans antialiased selection:bg-neutral-900 selection:text-white">
-      {/* SaaS Style Header Navbar */}
+      {/* Header */}
       <header className="bg-white/80 backdrop-blur-md border-b border-neutral-200/80 px-6 py-3.5 sticky top-0 z-40">
         <div className="max-w-4xl mx-auto flex items-center justify-between">
           <div className="flex items-center space-x-2.5">
@@ -94,75 +96,101 @@ export default function App() {
           </div>
 
           <div className="text-xs font-semibold text-neutral-400">
-            트렌드 ➔ 기회검증 ➔ AI 상품화
+            TREND ➔ POI ➔ OPPORTUNITY ➔ AI
           </div>
         </div>
       </header>
 
-      {/* Main Container: Apple/Notion SaaS Centered 1-Column Layout */}
-      <main className="max-w-4xl mx-auto px-6 py-12 space-y-16">
+      <main className="max-w-4xl mx-auto px-6 py-10 space-y-12">
 
-        {/* 1. Hero Keyword Input Section */}
-        <section className="space-y-6 text-center max-w-2xl mx-auto">
+        {/* Hero Section */}
+        <section className="space-y-4 text-center max-w-2xl mx-auto">
           <div className="space-y-2">
             <h1 className="text-3xl sm:text-4xl font-black text-neutral-900 tracking-tight leading-tight">
-              트렌드에서<br />새로운 여행상품을 발견합니다.
+              지금 뜨는 트렌드에서<br />다음 여행상품을 발견합니다.
             </h1>
             <p className="text-xs sm:text-sm text-neutral-500 font-medium leading-relaxed">
-              요즘 뜨는 키워드나 컨셉을 입력하고 관광상품 기회를 검증해보세요.
+              네이버 데이터랩 실증 트렌드 지수와 한국관광공사 POI 자원을 실시간으로 연결합니다.
             </p>
           </div>
+        </section>
 
-          {/* Search Box */}
-          <form onSubmit={handleSearchSubmit} className="relative max-w-xl mx-auto">
-            <div className="flex items-center bg-white border border-neutral-300 hover:border-neutral-400 focus-within:border-neutral-900 rounded-2xl p-2 shadow-sm transition-all">
-              <Search className="w-5 h-5 text-neutral-400 ml-3 shrink-0" />
-              <input
-                type="text"
-                value={searchInput}
-                onChange={(e) => setSearchInput(e.target.value)}
-                placeholder="러닝, K-POP 촬영지, 야간관광, 미식..."
-                className="w-full pl-3 pr-2 py-2 text-sm text-neutral-900 placeholder-neutral-400 bg-transparent focus:outline-none font-medium"
-              />
-              {searchInput && (
-                <button type="button" onClick={handleClearSearch} className="text-neutral-400 hover:text-neutral-600 text-xs font-bold px-2">
-                  ✕
-                </button>
-              )}
-              <button
-                type="submit"
-                className="bg-neutral-900 hover:bg-neutral-800 text-white font-bold text-xs px-5 py-2.5 rounded-xl transition-colors shrink-0"
-              >
-                기회 찾기
-              </button>
+        {/* 1. Naver DataLab Real Trend Section */}
+        <section className="space-y-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-2">
+              <TrendingUp className="w-4 h-4 text-neutral-900" />
+              <h2 className="text-sm font-black text-neutral-900 tracking-tight">
+                지금 포착된 상승 트렌드
+              </h2>
             </div>
-          </form>
+            <span className="text-[10px] text-neutral-400 font-medium">
+              검색 트렌드 · NAVER DataLab
+            </span>
+          </div>
 
-          {/* Region Filter & Popular Keywords */}
-          <div className="flex flex-wrap items-center justify-center gap-2 pt-1 text-xs">
-            <span className="text-neutral-400 font-medium">인기 트렌드:</span>
-            {popularKeywords.map((kw) => (
-              <button
-                key={kw}
-                onClick={() => handleKeywordClick(kw)}
-                className={`px-2.5 py-1 rounded-lg font-medium transition-all ${
-                  selectedKeyword === kw
-                    ? 'bg-neutral-900 text-white font-bold'
-                    : 'bg-neutral-100 text-neutral-600 hover:bg-neutral-200'
-                }`}
-              >
-                {kw}
-              </button>
-            ))}
+          {trendsLoading ? (
+            <div className="bg-white rounded-2xl p-6 border border-neutral-200 text-center text-xs text-neutral-400">
+              네이버 데이터랩 실증 트렌드 지수를 실시간 계산하고 있습니다...
+            </div>
+          ) : !hasNaverKeys ? (
+            <div className="bg-amber-50 rounded-2xl p-4 border border-amber-200 text-xs text-amber-800 flex items-start space-x-3">
+              <KeyRound className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+              <div>
+                <p className="font-bold">네이버 API 키 미설정 안내</p>
+                <p className="text-[11px] text-amber-700 mt-0.5">
+                  <code className="bg-amber-100 px-1 rounded font-mono">.env.local</code>에 <code className="bg-amber-100 px-1 rounded font-mono">NAVER_CLIENT_ID</code> 및 <code className="bg-amber-100 px-1 rounded font-mono">NAVER_CLIENT_SECRET</code>을 설정하면 네이버 데이터랩 검색 트렌드 수치가 실시간 자동 반영됩니다.
+                </p>
+              </div>
+            </div>
+          ) : trends.length === 0 ? (
+            <div className="bg-white rounded-2xl p-6 border border-neutral-200 text-center text-xs text-neutral-500">
+              현재 뚜렷한 상승 트렌드가 포착되지 않았습니다.
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5">
+              {trends.map((t) => {
+                const isSelected = selectedKeyword === t.keyword;
+                return (
+                  <div
+                    key={t.keyword}
+                    onClick={() => handleSelectTrendKeyword(t.keyword)}
+                    className={`bg-white rounded-2xl border p-3.5 cursor-pointer transition-all flex flex-col justify-between space-y-2 ${
+                      isSelected
+                        ? 'border-neutral-900 ring-2 ring-neutral-900 bg-neutral-50/40 shadow-sm'
+                        : 'border-neutral-200 hover:border-neutral-400'
+                    }`}
+                  >
+                    <div>
+                      <span className="text-[9px] font-bold text-neutral-400 uppercase tracking-wider block mb-0.5">TREND</span>
+                      <h3 className="text-xs font-black text-neutral-900 truncate">{t.keyword}</h3>
+                    </div>
 
-            <div className="w-full flex justify-center items-center space-x-1 mt-2">
-              <span className="text-[11px] text-neutral-400 font-medium">지역 필터:</span>
+                    <div>
+                      <span className="text-[10px] text-green-600 font-extrabold flex items-center gap-0.5">
+                        ↑ {t.changeRate}%
+                      </span>
+                      <span className="text-[9px] text-neutral-400 block font-medium">검색 관심도</span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </section>
+
+        {/* 2. Manual Keyword Search */}
+        <section className="bg-white rounded-2xl p-4 border border-neutral-200 shadow-sm space-y-3">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-neutral-800">직접 트렌드 찾아보기</span>
+            <div className="flex items-center space-x-1 text-[11px] text-neutral-400">
+              <span>지역:</span>
               <div className="inline-flex bg-neutral-100 p-0.5 rounded-lg">
                 {regions.map((r) => (
                   <button
                     key={r.name}
                     onClick={() => setAreaCode(r.code)}
-                    className={`px-2 py-0.5 text-[11px] font-bold rounded-md transition-all ${
+                    className={`px-2 py-0.5 text-[10px] font-bold rounded-md transition-all ${
                       areaCode === r.code ? 'bg-white text-neutral-900 shadow-sm' : 'text-neutral-500 hover:text-neutral-900'
                     }`}
                   >
@@ -172,22 +200,46 @@ export default function App() {
               </div>
             </div>
           </div>
+
+          <form onSubmit={handleSearchSubmit} className="flex items-center space-x-2">
+            <div className="relative flex-1">
+              <Search className="w-4 h-4 text-neutral-400 absolute left-3 top-2.5" />
+              <input
+                type="text"
+                value={searchInput}
+                onChange={(e) => setSearchInput(e.target.value)}
+                placeholder="관심 키워드나 콘텐츠 입력..."
+                className="w-full pl-9 pr-8 py-2 text-xs text-neutral-900 placeholder-neutral-400 bg-neutral-50 border border-neutral-200 rounded-xl focus:outline-none focus:border-neutral-900 font-medium"
+              />
+              {searchInput && (
+                <button type="button" onClick={handleClearSearch} className="absolute right-2.5 top-2 text-neutral-400 text-xs font-bold">
+                  ✕
+                </button>
+              )}
+            </div>
+            <button
+              type="submit"
+              className="bg-neutral-900 hover:bg-neutral-800 text-white font-bold text-xs px-4 py-2 rounded-xl transition-colors shrink-0"
+            >
+              분석
+            </button>
+          </form>
         </section>
 
-        {/* 2. Opportunity Results Section */}
-        <section className="space-y-4 pt-4 border-t border-neutral-100">
+        {/* 3. Opportunity Results Section */}
+        <section className="space-y-4 pt-2">
           <OpportunityList
             selectedKeyword={selectedKeyword}
             selectedEcho={selectedEcho}
             onSelectEcho={handleSelectEcho}
             tourData={tourData}
-            loading={loading}
-            error={error}
+            loading={tourLoading}
+            error={tourError}
             isNationwideFallback={isNationwideFallback}
           />
         </section>
 
-        {/* 3. Opportunity Detail & AI Product Creation Section */}
+        {/* 4. Opportunity Detail & AI Product Creation Section */}
         {selectedEcho && (
           <section className="bg-white rounded-3xl p-6 sm:p-8 border border-neutral-200 shadow-sm pt-6">
             <OpportunityDetail
@@ -200,8 +252,8 @@ export default function App() {
 
       </main>
 
-      <footer className="border-t border-neutral-200 bg-white py-8 mt-20 text-center text-xs text-neutral-400">
-        YAHO STUDIO — 한국관광공사 OpenAPI 기반 관광상품 기획 가공 엔진
+      <footer className="border-t border-neutral-200 bg-white py-8 mt-16 text-center text-xs text-neutral-400">
+        YAHO STUDIO — NAVER DataLab & 한국관광공사 TourAPI 기반 관광상품 기획 가공 엔진
       </footer>
     </div>
   );
