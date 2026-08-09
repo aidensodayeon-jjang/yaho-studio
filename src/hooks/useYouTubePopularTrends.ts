@@ -3,7 +3,16 @@ import { useState, useEffect } from 'react';
 export interface YouTubePopularTrendItem {
   title: string;
   summary: string;
-  keywords: string[];
+  entities?: {
+    people?: string[];
+    artists?: string[];
+    regions?: string[];
+    places?: string[];
+    events?: string[];
+    foods?: string[];
+    memes?: string[];
+    contents?: string[];
+  };
   youtubeSignal: {
     viralLevel: string;
     videoTitle: string;
@@ -11,7 +20,7 @@ export interface YouTubePopularTrendItem {
     viewCount: number;
   };
   naverSignal: {
-    changeRate: number;
+    changeRate: number | null;
     trend: string;
   };
 }

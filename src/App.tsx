@@ -166,11 +166,15 @@ export default function App() {
                       <div className="space-y-0.5">
                         <div className="flex items-center justify-between text-[9.5px]">
                           <span className="text-neutral-400">YouTube</span>
-                          <span className="font-bold text-red-500">VIRAL ↑</span>
+                          <span className="font-bold text-red-500">VIRAL {t.youtubeSignal.viralLevel}</span>
                         </div>
                         <div className="flex items-center justify-between text-[9.5px]">
                           <span className="text-neutral-400">NAVER</span>
-                          <span className="font-extrabold text-green-600">↑ {t.naverSignal.changeRate}%</span>
+                          {t.naverSignal.changeRate !== null ? (
+                            <span className="font-extrabold text-green-600">↑ {t.naverSignal.changeRate}%</span>
+                          ) : (
+                            <span className="text-[8.5px] font-medium text-neutral-400">검증 데이터 없음</span>
+                          )}
                         </div>
                       </div>
                     </div>

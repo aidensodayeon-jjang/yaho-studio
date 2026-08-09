@@ -242,6 +242,62 @@ export async function fetchTourSpots(
   return { spots: [], isNationwideFallback: false };
 }
 
+/**
+ * 트렌드 엔티티(places, regions, events, foods) 우선순위 기반 POI 검색 함수
+ */
+export async function fetchTourSpotsByEntities(
+  entities?: {
+    places?: string[];
+    regions?: string[];
+    events?: string[];
+    foods?: string[];
+  },
+  trendTitle?: string
+): Promise<FetchTourSpotsResult> {
+  const places = entities?.places || [];
+  const regions = entities?.regions || [];
+  const events = entities?.events || [];
+  const foods = entities?.foods || [];
+
+  // 1. places 시도
+  if (places.length > 0) {
+    const res = await fetchTourSpots(undefined, undefined, places[0]);
+    if (res.spots.length > 0) return res;
+  }
+
+  // 2. regions + places 시도
+  if (regions.length > 0 && places.length > 0) {
+    const res = await fetchTourSpots(undefined, undefined, `${regions[0]} ${places[0]}`);
+    if (res.spots.length > 0) return res;
+  }
+
+  // 3. events 시도
+  if (events.length > 0) {
+    const res = await fetchTourSpots(undefined, undefined, events[0]);
+    if (res.spots.length > 0) return res;
+  }
+
+  // 4. foods 시도
+  if (foods.length > 0) {
+    const res = await fetchTourSpots(undefined, undefined, foods[0]);
+    if (res.spots.length > 0) return res;
+  }
+
+  // 5. regions 단독 시도 (지역 기반 관광자원 조회)
+  if (regions.length > 0) {
+    const res = await fetchTourSpots(undefined, undefined, regions[0]);
+    if (res.spots.length > 0) return res;
+  }
+
+  // 6. trendTitle 기반 최종 시도
+  if (trendTitle) {
+    const res = await fetchTourSpots(undefined, undefined, trendTitle);
+    if (res.spots.length > 0) return res;
+  }
+
+  return { spots: [], isNationwideFallback: false };
+}
+
 export async function fetchTourSpotsByArea(areaCode: number = 1): Promise<TourSpotItem[]> {
   const res = await fetchTourSpots(areaCode);
   return res.spots;
