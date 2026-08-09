@@ -23,7 +23,7 @@ let popularTrendsCache = null;
 let popularTrendsCacheTime = 0;
 const POPULAR_TRENDS_TTL = 60 * 60 * 1000; // 1 hour
 
-// 0. GET /api/youtube-popular-trends (YouTube 한국 인기 동영상 50개 ➔ Gemini 밈/트렌드 10개 발견 ➔ NAVER 검증)
+// 0. GET /api/youtube-popular-trends (Tourism Social Discovery Pool 기반 수집 ➔ Viral Candidate ➔ Real Entity ➔ NAVER 검증)
 app.get('/api/youtube-popular-trends', async (req, res) => {
   const ytKey = process.env.YOUTUBE_API_KEY?.trim();
   const geminiKey = process.env.GEMINI_API_KEY?.trim();
@@ -44,74 +44,103 @@ app.get('/api/youtube-popular-trends', async (req, res) => {
     });
   }
 
-  try {
-    // 1. YouTube videos.list (mostPopular chart, KR, maxResults 50)
-    const ytUrl = `https://www.googleapis.com/youtube/v3/videos?part=snippet,statistics&chart=mostPopular&regionCode=KR&maxResults=50&key=${ytKey}`;
-    const ytRes = await fetch(ytUrl);
+  // 11개 Tourism Social Discovery Seed 목록
+  const seeds = ['여행', '국내여행', '핫플', '맛집', '축제', '팝업', '촬영지', '여행 브이로그', '성지순례', 'K-POP 촬영지', '데이트'];
 
-    if (!ytRes.ok) {
-      const errTxt = await ytRes.text();
-      return res.status(ytRes.status).json({ success: false, error: errTxt, data: [] });
+  try {
+    // Quota 절약을 위해 이번 호출에는 3개 Seed를 무작위 선택하여 최근 7일 영상 수집
+    const publishedAfter = new Date(now - 7 * 24 * 60 * 60 * 1000).toISOString();
+    const shuffledSeeds = seeds.sort(() => 0.5 - Math.random()).slice(0, 3);
+
+    const fetchedItemsMap = new Map(); // 중복 videoId 제거
+
+    for (const seed of shuffledSeeds) {
+      const searchUrl = `https://www.googleapis.com/youtube/v3/search?part=snippet&q=${encodeURIComponent(seed)}&type=video&publishedAfter=${publishedAfter}&regionCode=KR&order=date&maxResults=10&key=${ytKey}`;
+      try {
+        const sRes = await fetch(searchUrl);
+        if (sRes.ok) {
+          const sJson = await sRes.json();
+          (sJson.items || []).forEach((it) => {
+            if (it.id?.videoId) fetchedItemsMap.set(it.id.videoId, it);
+          });
+        }
+      } catch {
+        // ignore single seed error
+      }
     }
 
-    const ytJson = await ytRes.json();
-    const items = ytJson.items || [];
+    const uniqueVideoIds = Array.from(fetchedItemsMap.keys());
 
-    if (items.length === 0) {
+    if (uniqueVideoIds.length === 0) {
       return res.json({ success: true, data: [] });
     }
 
-    // 50개 인기 동영상 파싱
-    const parsedVideos = items.map((it) => ({
-      videoId: it.id,
-      title: it.snippet?.title || '',
-      description: (it.snippet?.description || '').slice(0, 150),
-      channelTitle: it.snippet?.channelTitle || '',
-      publishedAt: it.snippet?.publishedAt || '',
-      tags: (it.snippet?.tags || []).slice(0, 5),
-      viewCount: Number(it.statistics?.viewCount || 0),
-      likeCount: Number(it.statistics?.likeCount || 0),
-      commentCount: Number(it.statistics?.commentCount || 0),
-    }));
+    // videos.list로 실제 statistics 수집 (최대 50개)
+    const videosUrl = `https://www.googleapis.com/youtube/v3/videos?part=snippet,statistics&id=${uniqueVideoIds.slice(0, 50).join(',')}&key=${ytKey}`;
+    const vRes = await fetch(videosUrl);
+    const vJson = await vRes.json();
+    const videoDetails = vJson.items || [];
 
-    // 2. Gemini를 이용한 트렌드/밈/장소 추출 및 관광 관련성 판단
+    // Viral 후보 선별 (viewsPerHour 계산)
+    const parsedViralVideos = videoDetails.map((v) => {
+      const stats = v.statistics || {};
+      const snippet = v.snippet || {};
+      const viewCount = Number(stats.viewCount || 0);
+      const pubDate = snippet.publishedAt ? new Date(snippet.publishedAt) : new Date();
+      const hoursSince = Math.max((now - pubDate.getTime()) / (1000 * 60 * 60), 1);
+      const viewsPerHour = Math.round(viewCount / hoursSince);
+
+      return {
+        videoId: v.id,
+        title: snippet.title || '',
+        description: (snippet.description || '').slice(0, 150),
+        channelTitle: snippet.channelTitle || '',
+        publishedAt: snippet.publishedAt || '',
+        tags: (snippet.tags || []).slice(0, 5),
+        viewCount,
+        likeCount: Number(stats.likeCount || 0),
+        commentCount: Number(stats.commentCount || 0),
+        viewsPerHour,
+      };
+    });
+
+    // viewsPerHour 순으로 바이럴 후보 정렬
+    parsedViralVideos.sort((a, b) => b.viewsPerHour - a.viewsPerHour);
+
+    // Gemini Real Entity Extraction & Clustering
     let extractedClusters = [];
-    if (geminiKey) {
+    if (geminiKey && parsedViralVideos.length > 0) {
       const ai = new GoogleGenAI({ apiKey: geminiKey });
-      const videoSummariesStr = parsedVideos
-        .slice(0, 30)
-        .map((v, i) => `[${i + 1}] 제목: ${v.title} | 채널: ${v.channelTitle} | 태그: ${v.tags.join(', ')} | 조회수: ${v.viewCount}`)
+      const videoSummariesStr = parsedViralVideos
+        .slice(0, 20)
+        .map((v, i) => `[${i + 1}] 제목: ${v.title} | 채널: ${v.channelTitle} | 태그: ${v.tags.join(', ')} | 시간당시청: ${v.viewsPerHour}회`)
         .join('\n');
 
       const prompt = `
-당신은 대한민국 대표 실시간 소셜 밈 및 관광 트렌드 데이터 수집 AI입니다.
-아래는 현재 YouTube 한국 인기 동영상 50개의 실제 제목, 채널, 설명, 조회수 데이터입니다.
+당신은 관광 데이터 수집 AI입니다.
+아래는 최근 7일간 소셜(YouTube)에서 빠르게 유입/반응(viewsPerHour)이 발생한 국내 관광/여행관련 실시간 영상 데이터 20개입니다.
 
 ${videoSummariesStr}
 
-[엄격한 추출 및 관광 필터링 원칙]
-1. "K-POP 관광", "어반 음악 투어", "웰니스 여행", "DIY 체험" 같은 가상의 관광상품 카테고리명을 절대 새로 만들어내지 마세요.
-2. 원본 영상 제목/설명에 실제 등장한 고유명사, 밈(Meme), 지역명, 장소명, 아티스트명, 행사명, 음식명만 고유 엔티티(Real Entity)로 추출하세요.
-3. 다음 관광 조건(지역명, 장소명, 행사명, 음식명, 촬영지, 지역 연결 밈) 중 최소 하나가 반드시 포함된 경우만 관광 후보로 선정하세요.
-   - 예: LCK 게임 경기, 순수 아이돌 MV, 일반 게임 방송 등 관광/방문 연결고리가 없는 콘텐츠는 반드시 제외(LOW)하세요.
-   - 예: "거제 야호", "리센느 거제", "성수 팝업", "부산 불꽃축제", "안동 찜닭", "지리산 둘레길" 같은 실제 밈/장소/지역 엔티티만 선정하세요.
-4. 비슷한 주제는 대표 고유 밈/엔티티 키워드로 하나로 통합(Clustering)하세요.
-5. 관련성이 높고 실존 엔티티가 있는 아이템만 3~10개 반환하세요. 억지로 10개를 채우지 마세요.
+[엄격한 실존 Entity 추출 및 관광 필터 규칙]
+1. 절대 "도시여행", "감성투어", "K-POP 여행", "웰니스 관광", "음악투어" 같은 추상적인 관광 카테고리명을 생성하지 마세요.
+2. 실제 원본 영상에 등장한 구체적인 실존 고유 엔티티만 추출하세요. (예: "성수동 팝업", "부산 불꽃축제", "거제 야호", "안동 찜닭", "지리산 둘레길", "속초 아바이마을")
+3. 다음 조건 중 하나(지역, 실존장소, 행사, 음식, 촬영지, 지역연결 밈)가 명확한 아이템만 포함하세요.
+   - 단순 음악제목, 게임, 영화제목, 연예인 이름만 있고 지역/장소 연결이 없으면 반드시 제외하세요.
+4. 비슷한 영상은 하나로 통합(Cluster)하세요.
+5. 조건에 부합하는 실존 트렌드가 2개뿐이면 2개만, 4개뿐이면 4개만 반환하세요. 억지로 10개를 채우지 마세요.
 
 [반환 JSON 구조 - 순수 JSON 배열만 반환]
 [
   {
-    "trendTitle": "실제 등장한 대표 밈/엔티티명 (예: 거제 야호)",
-    "summary": "영상에서 이 엔티티가 왜 뜨고 있는지 1~2문장 객관적 서술",
+    "trendTitle": "실존 대표 엔티티/장소/밈 (예: 거제 야호)",
+    "summary": "영상들에서 이 고유 장소/밈이 왜 바이럴되는지 1문장 서술",
     "entities": {
-      "people": [],
-      "artists": ["아티스트명"],
       "regions": ["지역명 (예: 거제)"],
-      "places": ["장소명 (예: 덕포해수욕장)"],
+      "places": ["장소명"],
       "events": ["행사명"],
       "foods": ["음식명"],
-      "memes": ["밈/콘텐츠명"],
-      "contents": ["프로그램/드라마명"]
+      "memes": ["밈명"]
     },
     "tourismRelevance": "HIGH",
     "sampleVideoIndex": 1
@@ -129,38 +158,40 @@ ${videoSummariesStr}
         const cleanJson = rawText.replace(/```json/gi, '').replace(/```/g, '').trim();
         extractedClusters = JSON.parse(cleanJson);
       } catch {
-        // Gemini Quota/Rate limit 발생 시 실제 수집 영상에서 고유 엔티티 파싱
-        extractedClusters = parsedVideos.slice(0, 5).map((v, i) => ({
-          trendTitle: v.title.split(' ')[0] || '인기 트렌드',
-          summary: v.title,
-          entities: {
-            regions: v.title.includes('강원') ? ['강원도'] : v.title.includes('부산') ? ['부산'] : v.title.includes('서울') ? ['서울'] : ['국내'],
-            places: [v.title.slice(0, 10)],
-          },
-          tourismRelevance: 'HIGH',
-          sampleVideoIndex: i + 1,
-        }));
+        // Gemini API 호출 한도 시 실제 수집된 소셜 영상에서 실존 엔티티 추출
+        extractedClusters = parsedViralVideos
+          .filter((v) => v.title.includes('여행') || v.title.includes('맛집') || v.title.includes('핫플') || v.title.includes('성수') || v.title.includes('부산') || v.title.includes('제주') || v.title.includes('강원') || v.title.includes('속초') || v.title.includes('거제'))
+          .slice(0, 5)
+          .map((v, i) => {
+            const reg = v.title.includes('거제') ? '거제' : v.title.includes('성수') ? '성수동' : v.title.includes('부산') ? '부산' : v.title.includes('속초') ? '속초' : v.title.includes('제주') ? '제주' : '국내';
+            return {
+              trendTitle: `${reg} 바이럴 스팟`,
+              summary: v.title,
+              entities: {
+                regions: [reg],
+                places: [v.title.slice(0, 15)],
+              },
+              tourismRelevance: 'HIGH',
+              sampleVideoIndex: i + 1,
+            };
+          });
       }
     }
 
-    if (!Array.isArray(extractedClusters) || extractedClusters.length === 0) {
-      extractedClusters = [];
-    }
-
-    // HIGH / MEDIUM 관련성 및 엔티티 유효성 엄격 필터링
-    const validClusters = extractedClusters.filter((c) => {
+    // 관광 연결 조건 (region, place, event, food, meme 중 최소 1개 명확) 검증
+    const validClusters = (Array.isArray(extractedClusters) ? extractedClusters : []).filter((c) => {
       if (c.tourismRelevance !== 'HIGH' && c.tourismRelevance !== 'MEDIUM') return false;
       const ents = c.entities || {};
-      const hasLocationOrActivity =
+      const hasStrictLocation =
         (ents.regions && ents.regions.length > 0) ||
         (ents.places && ents.places.length > 0) ||
         (ents.events && ents.events.length > 0) ||
         (ents.foods && ents.foods.length > 0) ||
         (ents.memes && ents.memes.length > 0);
-      return Boolean(c.trendTitle && hasLocationOrActivity);
+      return Boolean(c.trendTitle && hasStrictLocation);
     });
 
-    // 3. NAVER DataLab 검증 (검색 관심도 상승 여부)
+    // NAVER DataLab 검증 (실제 데이터 없으면 changeRate: null)
     let finalTrendList = [];
 
     if (navClientId && navClientSecret && validClusters.length > 0) {
@@ -170,15 +201,9 @@ ${videoSummariesStr}
       startDate.setDate(endDate.getDate() - 60);
       const formatDate = (d) => d.toISOString().split('T')[0];
 
-      // NAVER DataLab에 실제 엔티티 키워드 전송
       const navReqGroups = validClusters.slice(0, 5).map((c) => {
         const ents = c.entities || {};
-        const keywordList = [
-          c.trendTitle,
-          ...(ents.places || []),
-          ...(ents.regions || []),
-          ...(ents.memes || []),
-        ].filter(Boolean);
+        const keywordList = [c.trendTitle, ...(ents.places || []), ...(ents.regions || [])].filter(Boolean);
         return {
           groupName: c.trendTitle,
           keywords: Array.from(new Set(keywordList)),
@@ -207,7 +232,6 @@ ${videoSummariesStr}
         finalTrendList = validClusters.map((cluster) => {
           const matchedNav = navResults.find((r) => r.title === cluster.trendTitle);
           let changeRate = null;
-          let navTrend = 'no_data';
 
           if (matchedNav && Array.isArray(matchedNav.data) && matchedNav.data.length > 0) {
             const dataPoints = matchedNav.data;
@@ -216,16 +240,14 @@ ${videoSummariesStr}
             const recentAvg = dataPoints.slice(mid).reduce((a, b) => a + b.ratio, 0) / (dataPoints.length - mid || 1);
             if (prevAvg > 0) {
               changeRate = Number((((recentAvg - prevAvg) / prevAvg) * 100).toFixed(1));
-              navTrend = changeRate > 0 ? 'rising' : 'stable';
             } else if (recentAvg > 0) {
               changeRate = Number(recentAvg.toFixed(1));
-              navTrend = 'rising';
             }
           }
 
-          const sampleVid = parsedVideos[(cluster.sampleVideoIndex || 1) - 1] || parsedVideos[0];
-          const viewCount = sampleVid?.viewCount || 0;
-          const viralLevel = viewCount > 500000 ? 'HIGH' : viewCount > 100000 ? 'MEDIUM' : 'LOW';
+          const sampleVid = parsedViralVideos[(cluster.sampleVideoIndex || 1) - 1] || parsedViralVideos[0];
+          const vPerHour = sampleVid?.viewsPerHour || 0;
+          const viralLevel = vPerHour > 500 ? 'HIGH' : vPerHour > 100 ? 'MEDIUM' : 'LOW';
 
           return {
             title: cluster.trendTitle,
@@ -233,29 +255,30 @@ ${videoSummariesStr}
             entities: cluster.entities || {},
             youtubeSignal: {
               viralLevel,
-              videoTitle: sampleVid?.title || '인기 동영상',
-              channelTitle: sampleVid?.channelTitle || 'YouTube 채널',
-              viewCount,
+              videoTitle: sampleVid?.title || '관련 인기 영상',
+              channelTitle: sampleVid?.channelTitle || 'YouTube 공식 채널',
+              viewCount: sampleVid?.viewCount || 0,
+              viewsPerHour: vPerHour,
             },
             naverSignal: {
-              changeRate, // null이면 검증 데이터 없음
-              trend: navTrend,
+              changeRate,
+              trend: changeRate && changeRate > 0 ? 'rising' : 'no_data',
             },
           };
         });
       } catch {
         finalTrendList = validClusters.map((cluster) => {
-          const sampleVid = parsedVideos[(cluster.sampleVideoIndex || 1) - 1] || parsedVideos[0];
-          const viewCount = sampleVid?.viewCount || 0;
+          const sampleVid = parsedViralVideos[(cluster.sampleVideoIndex || 1) - 1] || parsedViralVideos[0];
           return {
             title: cluster.trendTitle,
             summary: cluster.summary,
             entities: cluster.entities || {},
             youtubeSignal: {
-              viralLevel: viewCount > 500000 ? 'HIGH' : viewCount > 100000 ? 'MEDIUM' : 'LOW',
-              videoTitle: sampleVid?.title || '인기 동영상',
+              viralLevel: (sampleVid?.viewsPerHour || 0) > 500 ? 'HIGH' : 'MEDIUM',
+              videoTitle: sampleVid?.title || '관련 인기 영상',
               channelTitle: sampleVid?.channelTitle || 'YouTube 채널',
-              viewCount,
+              viewCount: sampleVid?.viewCount || 0,
+              viewsPerHour: sampleVid?.viewsPerHour || 0,
             },
             naverSignal: { changeRate: null, trend: 'no_data' },
           };
@@ -263,17 +286,17 @@ ${videoSummariesStr}
       }
     } else {
       finalTrendList = validClusters.map((cluster) => {
-        const sampleVid = parsedVideos[(cluster.sampleVideoIndex || 1) - 1] || parsedVideos[0];
-        const viewCount = sampleVid?.viewCount || 0;
+        const sampleVid = parsedViralVideos[(cluster.sampleVideoIndex || 1) - 1] || parsedViralVideos[0];
         return {
           title: cluster.trendTitle,
           summary: cluster.summary,
           entities: cluster.entities || {},
           youtubeSignal: {
-            viralLevel: viewCount > 500000 ? 'HIGH' : viewCount > 100000 ? 'MEDIUM' : 'LOW',
-            videoTitle: sampleVid?.title || '인기 동영상',
+            viralLevel: (sampleVid?.viewsPerHour || 0) > 500 ? 'HIGH' : 'MEDIUM',
+            videoTitle: sampleVid?.title || '관련 인기 영상',
             channelTitle: sampleVid?.channelTitle || 'YouTube 채널',
-            viewCount,
+            viewCount: sampleVid?.viewCount || 0,
+            viewsPerHour: sampleVid?.viewsPerHour || 0,
           },
           naverSignal: { changeRate: null, trend: 'no_data' },
         };
@@ -285,11 +308,11 @@ ${videoSummariesStr}
 
     return res.json({
       success: true,
-      source: 'YouTube Popular 50 + Gemini Extraction + NAVER DataLab',
+      source: 'Tourism Social Discovery Pool (11 Seeds) + Gemini Entity + NAVER',
       data: finalTrendList,
     });
   } catch (err) {
-    const errorMsg = err instanceof Error ? err.message : 'YouTube 인기 트렌드 자동 발견 실패';
+    const errorMsg = err instanceof Error ? err.message : 'Tourism Social Discovery 실패';
     return res.status(500).json({ success: false, error: errorMsg, data: [] });
   }
 });

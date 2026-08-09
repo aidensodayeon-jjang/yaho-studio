@@ -116,24 +116,24 @@ export default function App() {
           </div>
         </section>
 
-        {/* 1. YouTube Popular Auto-Discovered Trend Section */}
+        {/* 1. YouTube Social Discovery Pool Trend Section */}
         <section className="space-y-3">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-neutral-200/80 pb-2.5">
             <div className="flex items-center space-x-2">
               <Sparkles className="w-4 h-4 text-amber-500" />
               <h2 className="text-sm font-black text-neutral-900 tracking-tight">
-                지금 포착된 관광 트렌드 TOP 10
+                지금 포착된 관광 트렌드 {autoDiscoveredTrends.length > 0 ? autoDiscoveredTrends.length : ''}
               </h2>
             </div>
 
             <span className="text-[10px] text-neutral-400 font-medium">
-              YouTube 인기 콘텐츠 기반 · NAVER 검색 관심도 검증
+              YouTube 소셜 바이럴 신호 · NAVER 검색 관심도 검증
             </span>
           </div>
 
           {popularYtLoading ? (
             <div className="bg-white rounded-2xl p-6 border border-neutral-200 text-center text-xs text-neutral-400">
-              YouTube 한국 인기 동영상 50개를 실시간 분석하여 신규 밈/관광 트렌드를 발견하고 있습니다...
+              YouTube 소셜 바이럴 신호(최근 7일)를 분석하여 실제 관광 트렌드/장소를 탐지하고 있습니다...
             </div>
           ) : autoDiscoveredTrends.length === 0 ? (
             <div className="bg-white rounded-2xl p-6 border border-neutral-200 text-center text-xs text-neutral-500">
