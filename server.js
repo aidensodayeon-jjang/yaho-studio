@@ -15,30 +15,30 @@ app.use(express.json());
 
 const PORT = process.env.PORT || 3001;
 
-// 0. GET /api/trends (네이버 데이터랩 기반 검색어 트렌드 분석)
+// 0. GET /api/trends (네이버 데이터랩 기반 검색어 트렌드 분석: 인기 TOP 10 & 급상승 TOP 10)
 app.get('/api/trends', async (req, res) => {
   const clientId = process.env.NAVER_CLIENT_ID?.trim();
   const clientSecret = process.env.NAVER_CLIENT_SECRET?.trim();
 
-  // 관광 관련 10개 키워드 후보군 (기획안 규정)
+  // 관광 관련 10개 키워드 그룹 (네이버 데이터랩 규격)
   const candidateKeywords = [
-    { name: '러닝', param: ['러닝', '런닝', '러닝크루', '마라톤'] },
-    { name: '야간관광', param: ['야간관광', '야경투어', '야간개장', '밤마실'] },
-    { name: '미식여행', param: ['미식', '맛집투어', '식도락', '노포투어'] },
-    { name: '웰니스', param: ['웰니스', '황톳길', '맨발걷기', '치유의숲'] },
-    { name: 'K-POP', param: ['KPOP', '케이팝', '성지순례', '촬영지'] },
-    { name: '성지순례', param: ['성지순례', '드라마촬영지', '영화촬영지'] },
-    { name: '반려동물 여행', param: ['반려동물여행', '애견동반여행', '애견펜션'] },
-    { name: '캠핑', param: ['캠핑', '글램핑', '차박'] },
-    { name: '전통문화', param: ['전통문화', '한옥체험', '템플스테이'] },
-    { name: '성수동', param: ['성수동', '성수동 팝업', '성수 핫플'] },
+    { groupName: '러닝', keywords: ['러닝', '런닝', '러닝크루', '마라톤'] },
+    { groupName: '야간관광', keywords: ['야간관광', '야경투어', '야간개장', '밤마실'] },
+    { groupName: '미식여행', keywords: ['미식', '맛집투어', '식도락', '노포투어'] },
+    { groupName: '웰니스', keywords: ['웰니스', '황톳길', '맨발걷기', '치유의숲'] },
+    { groupName: 'K-POP', keywords: ['KPOP', '케이팝', '성지순례', '촬영지'] },
+    { groupName: '성지순례', keywords: ['성지순례', '드라마촬영지', '영화촬영지'] },
+    { groupName: '반려동물 여행', keywords: ['반려동물여행', '애견동반여행', '애견펜션'] },
+    { groupName: '캠핑', keywords: ['캠핑', '글램핑', '차박'] },
+    { groupName: '전통문화', keywords: ['전통문화', '한옥체험', '템플스테이'] },
+    { groupName: '성수동 핫플', keywords: ['성수동', '성수동 팝업', '성수 핫플'] },
   ];
 
   // 오늘 기준 날짜 계산 (최근 30일 vs 이전 30일)
   const endDate = new Date();
-  endDate.setDate(endDate.getDate() - 1); // 어제
+  endDate.setDate(endDate.getDate() - 1);
   const startDate = new Date();
-  startDate.setDate(endDate.getDate() - 60); // 60일 전
+  startDate.setDate(endDate.getDate() - 60);
 
   const formatDate = (d) => d.toISOString().split('T')[0];
 
@@ -47,35 +47,41 @@ app.get('/api/trends', async (req, res) => {
       success: false,
       reason: 'NO_KEY',
       message: 'NAVER_CLIENT_ID 및 NAVER_CLIENT_SECRET이 .env.local에 설정되지 않았습니다.',
-      data: [],
+      popularTrends: [],
+      risingTrends: [],
     });
   }
 
   try {
-    const response = await fetch('https://openapi.naver.com/v1/datalab/search', {
-      method: 'POST',
-      headers: {
-        'X-Naver-Client-Id': clientId,
-        'X-Naver-Client-Secret': clientSecret,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        startDate: formatDate(startDate),
-        endDate: formatDate(endDate),
-        timeUnit: 'date',
-        keywordGroups: candidateKeywords.slice(0, 5), // 최대 5개 키워드 그룹 비교
-      }),
-    });
+    // 네이버 데이터랩 요청 (1회당 최대 5개 키워드그룹 제한 ➔ 2회 분할 요청)
+    const batch1 = candidateKeywords.slice(0, 5);
+    const batch2 = candidateKeywords.slice(5, 10);
 
-    if (!response.ok) {
-      const errText = await response.text();
-      return res.status(response.status).json({ success: false, error: errText, data: [] });
-    }
+    const fetchBatch = async (batch) => {
+      const response = await fetch('https://openapi.naver.com/v1/datalab/search', {
+        method: 'POST',
+        headers: {
+          'X-Naver-Client-Id': clientId,
+          'X-Naver-Client-Secret': clientSecret,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          startDate: formatDate(startDate),
+          endDate: formatDate(endDate),
+          timeUnit: 'date',
+          keywordGroups: batch,
+        }),
+      });
 
-    const resData = await response.json();
-    const results = resData.results || [];
+      if (!response.ok) return [];
+      const resData = await response.json();
+      return resData.results || [];
+    };
 
-    const trendResults = results.map((group) => {
+    const [res1, res2] = await Promise.all([fetchBatch(batch1), fetchBatch(batch2)]);
+    const allResults = [...res1, ...res2];
+
+    const trendResults = allResults.map((group) => {
       const dataPoints = group.data || [];
       const mid = Math.floor(dataPoints.length / 2);
       const prevData = dataPoints.slice(0, mid);
@@ -97,20 +103,25 @@ app.get('/api/trends', async (req, res) => {
       };
     });
 
-    // 상승폭이 큰 순으로 정렬 후 상위 상승 키워드 반환
-    const risingTrends = trendResults
-      .filter((t) => t.changeRate > 0)
+    // 1. 인기 트렌드 TOP 10 (최근 30일 평균 검색 지수 기준 정렬)
+    const popularTrends = [...trendResults]
+      .sort((a, b) => b.recentAverage - a.recentAverage)
+      .slice(0, 10);
+
+    // 2. 급상승 트렌드 TOP 10 (검색 증가율 changeRate 기준 정렬)
+    const risingTrends = [...trendResults]
       .sort((a, b) => b.changeRate - a.changeRate)
-      .slice(0, 5);
+      .slice(0, 10);
 
     return res.json({
       success: true,
       source: 'NAVER DataLab',
-      data: risingTrends,
+      popularTrends,
+      risingTrends,
     });
   } catch (err) {
     const errorMsg = err instanceof Error ? err.message : '네이버 데이터랩 API 호출 중 에러가 발생했습니다.';
-    return res.status(500).json({ success: false, error: errorMsg, data: [] });
+    return res.status(500).json({ success: false, error: errorMsg, popularTrends: [], risingTrends: [] });
   }
 });
 

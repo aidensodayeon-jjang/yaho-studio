@@ -9,7 +9,8 @@ export interface TrendItem {
 }
 
 export function useNaverTrends() {
-  const [trends, setTrends] = useState<TrendItem[]>([]);
+  const [popularTrends, setPopularTrends] = useState<TrendItem[]>([]);
+  const [risingTrends, setRisingTrends] = useState<TrendItem[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [hasKeys, setHasKeys] = useState<boolean>(true);
@@ -27,18 +28,22 @@ export function useNaverTrends() {
         if (isMounted) {
           if (json.reason === 'NO_KEY') {
             setHasKeys(false);
-            setTrends([]);
-          } else if (json.success && Array.isArray(json.data)) {
+            setPopularTrends([]);
+            setRisingTrends([]);
+          } else if (json.success) {
             setHasKeys(true);
-            setTrends(json.data);
+            setPopularTrends(Array.isArray(json.popularTrends) ? json.popularTrends : []);
+            setRisingTrends(Array.isArray(json.risingTrends) ? json.risingTrends : []);
           } else {
-            setTrends([]);
+            setPopularTrends([]);
+            setRisingTrends([]);
           }
         }
       } catch (err) {
         if (isMounted) {
           setError(err instanceof Error ? err.message : '트렌드 데이터 수집 실패');
-          setTrends([]);
+          setPopularTrends([]);
+          setRisingTrends([]);
         }
       } finally {
         if (isMounted) setLoading(false);
@@ -49,5 +54,5 @@ export function useNaverTrends() {
     return () => { isMounted = false; };
   }, []);
 
-  return { trends, loading, error, hasKeys };
+  return { popularTrends, risingTrends, loading, error, hasKeys };
 }
