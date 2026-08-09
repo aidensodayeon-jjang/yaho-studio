@@ -10,6 +10,11 @@ dotenv.config();
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+const app = express();
+app.use(express.json());
+
+const PORT = process.env.PORT || 3001;
+
 // 메모리 캐시 (YouTube Quota 절약: 30분 캐싱)
 const youtubeCache = new Map();
 const YOUTUBE_CACHE_TTL = 30 * 60 * 1000; // 30 mins
