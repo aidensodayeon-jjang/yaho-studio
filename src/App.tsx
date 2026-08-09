@@ -13,9 +13,21 @@ export default function App() {
   const [keyword, setKeyword] = useState('거제 야호');
   const [selectedKeyword, setSelectedKeyword] = useState('거제 야호');
 
-  const { trends: autoDiscoveredTrends, loading: popularYtLoading } = useYouTubePopularTrends();
+  const { trends: autoDiscoveredTrends, loading: popularYtLoading, error: popularYtError } = useYouTubePopularTrends();
   const { data: tourData, loading: tourLoading, error: tourError, isNationwideFallback } = useTourData(areaCode || 1, 12, keyword);
   const [selectedEcho, setSelectedEcho] = useState<EchoCard | null>(null);
+
+  // autoDiscoveredTrends 로드 결과에 따른 state 동기화 & 에러 시 clear
+  useEffect(() => {
+    if (popularYtError || autoDiscoveredTrends.length === 0) {
+      setSelectedEcho(null);
+    } else if (autoDiscoveredTrends.length > 0) {
+      // 수집 성공 시 첫 번째 트렌드로 기본 선택 동기화
+      const firstTitle = autoDiscoveredTrends[0].title;
+      setKeyword(firstTitle);
+      setSelectedKeyword(firstTitle);
+    }
+  }, [autoDiscoveredTrends, popularYtError]);
 
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
