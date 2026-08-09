@@ -157,39 +157,84 @@ ${videoSummariesStr}
         const rawText = aiRes.text || '';
         const cleanJson = rawText.replace(/```json/gi, '').replace(/```/g, '').trim();
         extractedClusters = JSON.parse(cleanJson);
-      } catch {
-        // Gemini API 호출 한도 시 실제 수집된 소셜 영상에서 실존 엔티티 추출
-        extractedClusters = parsedViralVideos
-          .filter((v) => v.title.includes('여행') || v.title.includes('맛집') || v.title.includes('핫플') || v.title.includes('성수') || v.title.includes('부산') || v.title.includes('제주') || v.title.includes('강원') || v.title.includes('속초') || v.title.includes('거제'))
-          .slice(0, 5)
-          .map((v, i) => {
-            const reg = v.title.includes('거제') ? '거제' : v.title.includes('성수') ? '성수동' : v.title.includes('부산') ? '부산' : v.title.includes('속초') ? '속초' : v.title.includes('제주') ? '제주' : '국내';
-            return {
-              trendTitle: `${reg} 바이럴 스팟`,
-              summary: v.title,
-              entities: {
-                regions: [reg],
-                places: [v.title.slice(0, 15)],
-              },
-              tourismRelevance: 'HIGH',
-              sampleVideoIndex: i + 1,
-            };
-          });
+      } catch (err) {
+        console.log('[Gemini API Error]', err instanceof Error ? err.message : err);
+        extractedClusters = [];
       }
     }
 
-    // 관광 연결 조건 (region, place, event, food, meme 중 최소 1개 명확) 검증
-    const validClusters = (Array.isArray(extractedClusters) ? extractedClusters : []).filter((c) => {
-      if (c.tourismRelevance !== 'HIGH' && c.tourismRelevance !== 'MEDIUM') return false;
-      const ents = c.entities || {};
-      const hasStrictLocation =
+    // Generic Blacklist (이 단어들만 있거나 이 단어로 구성된 경우 제거)
+    const genericBlacklist = new Set([
+      '국내', '여행', '관광', '핫플', '핫플레이스', '바이럴', '스팟', '명소', '투어', '체험',
+      '여행지', '관광지', '데이트', '추천', '브이로그', '국내 바이럴 스팟', '인기 스팟', '바이럴 스팟'
+    ]);
+
+    console.log(`[YouTube] 수집 영상: ${parsedViralVideos.length}개`);
+    console.log(`[Gemini] 추출 Entity: ${extractedClusters.length}개`);
+
+    // Evidence & Generic & Deduplication & Tourism Strict Filter
+    const validClusters = [];
+    const seenTitles = new Set();
+    let evidenceRemovedCount = 0;
+    let genericRemovedCount = 0;
+    let dedupRemovedCount = 0;
+    let tourismRemovedCount = 0;
+
+    for (const cluster of (Array.isArray(extractedClusters) ? extractedClusters : [])) {
+      const rawTitle = String(cluster.trendTitle || '').trim();
+      if (!rawTitle) continue;
+
+      // 1. Generic Filter
+      if (genericBlacklist.has(rawTitle) || rawTitle.includes('바이럴 스팟')) {
+        genericRemovedCount++;
+        continue;
+      }
+
+      // 2. Evidence Filter (실제 원본 수집 영상 제목/설명/태그 텍스트에 등장하는지)
+      const sampleVid = parsedViralVideos[(cluster.sampleVideoIndex || 1) - 1] || parsedViralVideos[0];
+      const fullText = `${sampleVid?.title || ''} ${sampleVid?.description || ''} ${(sampleVid?.tags || []).join(' ')}`;
+      const ents = cluster.entities || {};
+
+      const titleMatched = fullText.includes(rawTitle);
+      const regionMatched = (ents.regions || []).some((r) => fullText.includes(r));
+      const placeMatched = (ents.places || []).some((p) => fullText.includes(p));
+
+      if (!titleMatched && !regionMatched && !placeMatched) {
+        evidenceRemovedCount++;
+        continue;
+      }
+
+      // 3. Tourism Strict Filter (region, place, event, food 중 최소 1개 필수)
+      const hasTourismEntity =
         (ents.regions && ents.regions.length > 0) ||
         (ents.places && ents.places.length > 0) ||
         (ents.events && ents.events.length > 0) ||
-        (ents.foods && ents.foods.length > 0) ||
-        (ents.memes && ents.memes.length > 0);
-      return Boolean(c.trendTitle && hasStrictLocation);
-    });
+        (ents.foods && ents.foods.length > 0);
+
+      if (!hasTourismEntity) {
+        tourismRemovedCount++;
+        continue;
+      }
+
+      // 4. Deduplication Filter (정규화 중복 제거)
+      const normalizedTitle = rawTitle.replace(/\s+/g, '').toLowerCase();
+      if (seenTitles.has(normalizedTitle)) {
+        dedupRemovedCount++;
+        continue;
+      }
+
+      seenTitles.add(normalizedTitle);
+      validClusters.push({
+        ...cluster,
+        trendTitle: rawTitle,
+      });
+    }
+
+    console.log(`[Evidence Filter] 제거: ${evidenceRemovedCount}개`);
+    console.log(`[Generic Filter] 제거: ${genericRemovedCount}개`);
+    console.log(`[Deduplication] 제거: ${dedupRemovedCount}개`);
+    console.log(`[Tourism Filter] 제거: ${tourismRemovedCount}개`);
+    console.log(`[Final Trends] 검증 통과: ${validClusters.length}개`);
 
     // NAVER DataLab 검증 (실제 데이터 없으면 changeRate: null)
     let finalTrendList = [];
