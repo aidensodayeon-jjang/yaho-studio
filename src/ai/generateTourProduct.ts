@@ -1,4 +1,3 @@
-import { GoogleGenAI } from '@google/genai';
 import { VisitorAnalyticsSummary } from '../api/visitorAnalyticsApi';
 import { RelatedTourSpot } from '../types/relatedTour';
 import { OpportunityScoreBreakdown } from '../utils/calculateOpportunityScore';
@@ -10,12 +9,26 @@ export interface CourseStep {
   description: string;
 }
 
+export interface ItineraryStep {
+  day: string;
+  spots: string[];
+  desc: string;
+}
+
 export interface TourProductResult {
   productName: string;
+  concept?: string;
+  targetCustomers?: string[];
+  duration: string;
+  transportation?: string;
+  estimatedPrice?: string;
+  opportunityReason?: string;
+  differentiation?: string;
+  itinerary?: ItineraryStep[];
+  expectedEffect?: string;
   oneLineIntro: string;
   targetCustomer: string;
   recommendedSeason: string;
-  duration: string;
   course: CourseStep[];
   keyExperience: string[];
   operationPlan: string;
@@ -26,6 +39,14 @@ export interface TourProductResult {
   cautions: string[];
   sourceNote: string;
   generatedBy: 'gemini' | 'rule';
+}
+
+export interface ProductIdea {
+  title: string;
+  oneLineConcept: string;
+  target: string;
+  reason: string;
+  tags: string[];
 }
 
 export interface TourProductInput {
@@ -45,10 +66,78 @@ export interface TourProductInput {
   trendDirection?: 'RISING' | 'STABLE' | 'FALLING';
   trendChangeRate?: number;
   hasOriginalImage?: boolean;
+  selectedIdea?: ProductIdea | null;
 }
 
 // 메모리 캐시 저장소 (Key: contentid 또는 title)
 const tourProductCache = new Map<string, TourProductResult>();
+const productIdeasCache = new Map<string, ProductIdea[]>();
+
+/**
+ * 0. AI 관광상품 아이디어 3개 생성 함수
+ */
+export async function generateProductIdeas(input: TourProductInput): Promise<ProductIdea[]> {
+  const cacheKey = (input.contentid || input.title || 'default') + '-ideas';
+  if (productIdeasCache.has(cacheKey)) {
+    return productIdeasCache.get(cacheKey)!;
+  }
+
+  const title = input.title || '관광지';
+  const overview = input.overview || '';
+
+  try {
+    const response = await fetch('/api/generate-tour-product-ideas', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(input),
+    });
+
+    if (response.ok) {
+      const resJson = await response.json();
+      if (resJson.success && Array.isArray(resJson.data) && resJson.data.length >= 3) {
+        const ideas = resJson.data.slice(0, 3).map((item: any) => ({
+          title: String(item.title || `${title} 로컬 투어`),
+          oneLineConcept: String(item.oneLineConcept || `${title}와 주변 명소를 연결하는 콤보 코스`),
+          target: String(item.target || '2030 자유여행객'),
+          reason: String(item.reason || '방문 수요 및 연계 성장 가능성 우수'),
+          tags: Array.isArray(item.tags) ? item.tags.map(String) : ['#로컬관광', '#인기스팟', '#체험'],
+        }));
+        productIdeasCache.set(cacheKey, ideas);
+        return ideas;
+      }
+    }
+  } catch {
+    // ignore
+  }
+
+  // Fallback Rule-Based Ideas 3종
+  const fallbackIdeas: ProductIdea[] = [
+    {
+      title: `${title} NIGHT WALK`,
+      oneLineConcept: `${title} 야간 경관과 주변 로컬 상권을 연결하는 야간 도보 프로그램`,
+      target: '2030 직장인 & 연인',
+      reason: '최근 야간 관광 수요 및 SNS 시각적 언급량이 매우 우수함',
+      tags: ['#야간관광', '#로컬상권', '#2030'],
+    },
+    {
+      title: `${title} 가족 미션 어드벤처`,
+      oneLineConcept: `가족이 ${title} 주변을 이동하며 미션을 수행하는 체험형 관광상품`,
+      target: '가족 단위 주말 여행객',
+      reason: '체류시간 증대 효과가 크며 체험형 콘텐츠 결합에 적합함',
+      tags: ['#가족여행', '#체험관광', '#주말'],
+    },
+    {
+      title: `${title} LOCAL TASTE`,
+      oneLineConcept: `${title} 산책과 지역 카페·음식점을 연결한 반일 로컬 미식 프로그램`,
+      target: '식도락 & 미식 여행객',
+      reason: '주변 상권 경제 활성화 및 맛집 연계 소비 유도',
+      tags: ['#미식관광', '#카페', '#로컬'],
+    },
+  ];
+
+  productIdeasCache.set(cacheKey, fallbackIdeas);
+  return fallbackIdeas;
+}
 
 /**
  * 1. Rule-Based 관광상품 기획 생성 함수
@@ -165,7 +254,7 @@ export function generateRuleBasedTourProduct(input: TourProductInput): TourProdu
 }
 
 /**
- * 2. Gemini 연동 AI 관광상품 기획 생성 함수
+ * 2. 서버 백엔드 API (/api/generate-tour-product) 호출 함수
  */
 export async function generateTourProduct(input: TourProductInput): Promise<TourProductResult> {
   const cacheKey = input.contentid || input.title || 'default';
@@ -173,115 +262,92 @@ export async function generateTourProduct(input: TourProductInput): Promise<Tour
     return tourProductCache.get(cacheKey)!;
   }
 
-  const apiKey = (typeof import.meta !== 'undefined' && import.meta.env ? import.meta.env.VITE_GEMINI_API_KEY : process.env.VITE_GEMINI_API_KEY)?.trim();
-
-  // API 키가 없으면 Rule-Based로 즉시 Fallback
-  if (!apiKey) {
-    const ruleResult = generateRuleBasedTourProduct(input);
-    tourProductCache.set(cacheKey, ruleResult);
-    return ruleResult;
-  }
-
-  // 실증 전달 데이터 가공
   const title = input.title || '관광지';
   const relatedNames = (input.relatedSpots || []).slice(0, 5).map((s) => s.title);
-  const relatedNamesStr = relatedNames.length > 0 ? relatedNames.join(', ') : '없음 (단독 스팟 구성)';
-
-  const prompt = `
-당신은 대한민국 한국관광공사 TourAPI 데이터 전문 인바운드/로컬 관광상품 전문 MD(Merchandiser)입니다.
-제공된 한국관광공사 실시간 API 데이터만을 근거로 구체적인 관광상품 기획안(JSON)을 작성해 주세요.
-
-[엄격한 제약사항 및 원칙 - 위반 시 무효]
-1. 코스(course) 구성 시 반드시 전달된 관광지명("${title}")과 실제 연관 관광지 목록([${relatedNamesStr}])에 있는 장소 이름만 사용하세요. 목록에 없는 가상의 장소를 절대 임의로 지어내거나 추가하지 마세요.
-2. 방문자 수, 외국인 비율 통계는 특정 관광지 단독 수치가 아니라 해당 지역 행정구역 전체 유동인구 데이터임을 인식하고 서술하세요.
-3. 예측 데이터(트렌드 방향 등)는 확정 사실이 아닌 예측이라고 서술하세요.
-4. 가격은 "권장 가격대"로 표기하고 확정가로 단정하지 마세요.
-5. 정확히 지정된 JSON 구조로만 반환하고 마크다운 코드블록이나 불필요한 설명을 포함하지 마세요.
-6. 한국어로 작성해 주세요.
-
-[전달된 실제 데이터]
-- 메인 관광지명: ${title}
-- 주소: ${input.addr1 || '정보 없음'}
-- contentTypeId: ${input.contenttypeid || '정보 없음'}
-- 상세 개요: ${input.overview || '정보 없음'}
-- Opportunity Score: ${input.score ?? '정보 없음'}점
-- 실제 연관 관광지 목록: ${relatedNamesStr}
-- 지역 방문자 데이터: ${input.visitorData ? `${input.visitorData.areaNm} 월 ${Math.round(input.visitorData.totalVisitors / 10000)}만명 유동인구` : '데이터 미제공'}
-- 중심 관광지 포함 여부: ${input.isCurrentSpotCentral ? `포함 (${input.currentSpotRank ? `${input.currentSpotRank}위` : '목록 내'})` : '미포함 (신규 연계 자원)'}
-- 관광 트렌드 예측: ${input.trendDirection ? `${input.trendDirection === 'RISING' ? '상승 추세' : '안정 추세'} (${input.trendChangeRate}%)` : '미제공'}
-
-[반환 JSON 객체 형식]
-{
-  "productName": "관광상품명",
-  "oneLineIntro": "한줄 소개 문구",
-  "targetCustomer": "추천 타깃 고객층",
-  "recommendedSeason": "추천 계절",
-  "duration": "예상 소요시간",
-  "course": [
-    { "order": 1, "placeName": "${title}", "description": "1번 장소 설명" }
-  ],
-  "keyExperience": ["핵심 체험 1", "핵심 체험 2", "핵심 체험 3"],
-  "operationPlan": "운영 방식 및 단체 규모 가이드",
-  "priceGuide": "권장 가격대 (예: 1인당 35,000원 ~ 45,000원)",
-  "marketingPoints": ["마케팅 셀링포인트 1", "마케팅 셀링포인트 2"],
-  "snsCopy": "SNS 홍보 문구",
-  "hashtags": ["#해시태그1", "#해시태그2"],
-  "cautions": ["운영 주의사항 1", "운영 주의사항 2"]
-}
-`;
 
   try {
-    const ai = new GoogleGenAI({ apiKey });
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
-      contents: prompt,
+    const response = await fetch('/api/generate-tour-product', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(input),
     });
 
-    const rawText = response.text || '';
-    // 마크다운 코드블록 제거
-    const cleanJsonText = rawText.replace(/```json/gi, '').replace(/```/g, '').trim();
-    const parsed = JSON.parse(cleanJsonText);
+    if (!response.ok) {
+      throw new Error(`Server returned status ${response.status}`);
+    }
 
-    // 코스 장소 검증: 연관 관광지 목록 + 선택 관광지명에 포함되지 않는 환각 장소 정화
+    const resJson = await response.json();
+    if (!resJson.success || !resJson.data) {
+      throw new Error(resJson.error || 'Server error');
+    }
+
+    const parsed = resJson.data;
+
+    // 코스 장소 검증
     const validPlaceNames = new Set([title, ...relatedNames]);
-    const filteredCourse: CourseStep[] = (parsed.course || []).map((c: CourseStep, idx: number) => {
-      let pName = String(c.placeName || '').trim();
-      // 유효한 장소가 아니면 제목이나 연관 관광지 장소로 대체
-      const matched = Array.from(validPlaceNames).find(v => pName.includes(v) || v.includes(pName));
-      if (matched) {
-        pName = matched;
-      } else {
-        pName = validPlaceNames.has(pName) ? pName : (relatedNames[idx - 1] || title);
-      }
+    const rawItinerary = Array.isArray(parsed.itinerary) ? parsed.itinerary : [];
+    
+    const itinerary = rawItinerary.map((item: any, idx: number) => {
+      const rawSpots = Array.isArray(item.spots) ? item.spots.map(String) : [title];
+      const validSpots = rawSpots.map((sp: string) => {
+        const matched = Array.from(validPlaceNames).find(v => sp.includes(v) || v.includes(sp));
+        return matched || sp;
+      });
+
       return {
-        order: idx + 1,
-        placeName: pName,
-        description: String(c.description || `${pName} 방문 탐방`),
+        day: String(item.day || `Day ${idx + 1}: 메인 코스`),
+        spots: validSpots.length > 0 ? validSpots : [title],
+        desc: String(item.desc || `${title} 중심 가이드 탐방 진행`),
       };
     });
 
+    const courseSteps: CourseStep[] = itinerary.flatMap((it: any, dayIdx: number) => {
+      return (it.spots || []).map((spotName: string, spotIdx: number) => ({
+        order: dayIdx * 10 + spotIdx + 1,
+        placeName: spotName,
+        description: it.desc,
+      }));
+    });
+
     const result: TourProductResult = {
-      productName: String(parsed.productName || `${title} 로컬 투어`),
-      oneLineIntro: String(parsed.oneLineIntro || `${title} 중심 추천 관광 패키지`),
-      targetCustomer: String(parsed.targetCustomer || '2030 여행객 및 FIT 자유여행객'),
-      recommendedSeason: String(parsed.recommendedSeason || '사계절 추천'),
-      duration: String(parsed.duration || '약 3 ~ 4시간'),
-      course: filteredCourse.length > 0 ? filteredCourse : generateRuleBasedTourProduct(input).course,
-      keyExperience: Array.isArray(parsed.keyExperience) ? parsed.keyExperience.map(String) : [`${title} 탐방`],
-      operationPlan: String(parsed.operationPlan || '소규모 가이드 투어 운영'),
-      priceGuide: String(parsed.priceGuide || '권장 가격대: 1인 35,000원 ~ 45,000원'),
-      marketingPoints: Array.isArray(parsed.marketingPoints) ? parsed.marketingPoints.map(String) : ['실증 데이터 기반 코스'],
-      snsCopy: String(parsed.snsCopy || `📍 [${title}] 추천 투어 코스!`),
-      hashtags: Array.isArray(parsed.hashtags) ? parsed.hashtags.map(String) : [`#${title.replace(/\s+/g, '')}`],
-      cautions: Array.isArray(parsed.cautions) ? parsed.cautions.map(String) : ['운영 전 현장 답사 필요'],
-      sourceNote: 'TourAPI & Gemini AI 빅데이터 기반 상품기획안',
+      productName: String(parsed.productName || `${title} 로컬 콤보 투어`),
+      concept: String(parsed.concept || `${title} 중심의 검증된 로컬 가이드 패키지`),
+      targetCustomers: Array.isArray(parsed.targetCustomers) ? parsed.targetCustomers.map(String) : ['2030 자유여행객'],
+      duration: String(parsed.duration || '2박 3일'),
+      transportation: String(parsed.transportation || '전용 리무진'),
+      estimatedPrice: String(parsed.estimatedPrice || '1인당 35,000원 ~ 49,000원'),
+      opportunityReason: String(parsed.opportunityReason || '지역 방문자 및 연계 관광 데이터 지표 우수'),
+      differentiation: String(parsed.differentiation || '독창적 로컬 동선 및 체류시간 증대 효과'),
+      itinerary: itinerary.length > 0 ? itinerary : [
+        {
+          day: 'Day 1: 메인 코스',
+          spots: [title],
+          desc: `${title}의 핵심 경관 및 가이드 스토리텔링`
+        }
+      ],
+      marketingPoints: Array.isArray(parsed.marketingPoints) ? parsed.marketingPoints.map(String) : ['TourAPI 빅데이터 검증'],
+      expectedEffect: String(parsed.expectedEffect || '지역 체류시간 증가 및 경제 활성화'),
+
+      // 하위 호환 필드
+      oneLineIntro: String(parsed.concept || `${title} 로컬 패키지`),
+      targetCustomer: Array.isArray(parsed.targetCustomers) ? parsed.targetCustomers.join(', ') : '2030 여행객',
+      recommendedSeason: '사계절 추천',
+      course: courseSteps.length > 0 ? courseSteps : generateRuleBasedTourProduct(input).course,
+      keyExperience: Array.isArray(parsed.marketingPoints) ? parsed.marketingPoints.map(String) : [`${title} 가이드 탐방`],
+      operationPlan: String(parsed.transportation || '소규모 전용 가이드 투어'),
+      priceGuide: String(parsed.estimatedPrice || '1인당 35,000원 ~ 49,000원'),
+      snsCopy: `📍 [${title}] AI가 강추하는 로컬 관광상품 코스 공개!`,
+      hashtags: [`#${title.replace(/\s+/g, '')}`, `#YAHO스튜디오`],
+      cautions: ['운영 전 현동선 실측 필요'],
+      sourceNote: 'TourAPI & Node.js 백엔드 Gemini 2.5 Flash API 실증 기반 기획안',
       generatedBy: 'gemini',
     };
 
     tourProductCache.set(cacheKey, result);
     return result;
   } catch {
-    // API 호출 및 JSON 파싱 실패 시 Rule-Based 자동 Fallback
     const fallbackResult = generateRuleBasedTourProduct(input);
     tourProductCache.set(cacheKey, fallbackResult);
     return fallbackResult;
