@@ -121,45 +121,52 @@ app.get('/api/youtube-popular-trends', async (req, res) => {
     console.log(`viewsPerHour < 10 제거 후: ${viralCandidates.length}개`);
     viralCandidates.sort((a, b) => b.viewsPerHour - a.viewsPerHour);
 
-    // Gemini Real Entity Extraction
-    console.log('\n=================== [5] GEMINI ENTITY EXTRACTION ===================');
+    // Gemini Real Entity Extraction (Batch 1회 전송)
+    console.log('\n=================== [5] GEMINI BATCH ENTITY EXTRACTION ===================');
     let extractedClusters = [];
+    let extractionSource = 'gemini';
+
     if (geminiKey && viralCandidates.length > 0) {
       const ai = new GoogleGenAI({ apiKey: geminiKey });
       const videoSummariesStr = viralCandidates
-        .slice(0, 20)
-        .map((v, i) => `[${i + 1}] 제목: ${v.title} | 채널: ${v.channelTitle} | 태그: ${v.tags.join(', ')} | 시간당시청: ${v.viewsPerHour}회`)
+        .slice(0, 25)
+        .map((v, i) => `[${i + 1}] ID:${v.videoId} | 제목: ${v.title} | 채널: ${v.channelTitle} | 태그: ${v.tags.join(', ')} | 시청속도: ${v.viewsPerHour}회/h`)
         .join('\n');
 
       const prompt = `
-당신은 대한민국 실 소셜 데이터 분석 AI입니다.
-아래는 최근 7일간 소셜(YouTube)에서 빠르게 반응(viewsPerHour)이 발생한 국내 관광/여행관련 실시간 영상 데이터 20개입니다.
+당신은 대한민국 실 소셜 밈 및 관광 데이터 수집 AI입니다.
+아래는 최근 소셜(YouTube)에서 유입 속도가 높은 실시간 영상 25개입니다.
 
 ${videoSummariesStr}
 
-[엄격한 실존 Entity 추출 규칙]
-1. 절대 "도시여행", "감성투어", "K-POP 여행", "웰니스 관광", "음악투어" 같은 추상적인 관광 카테고리명을 생성하지 마세요.
-2. 원본 영상 제목/태그에 명확히 등장한 구체적인 실존 고유 엔티티만 추출하세요. (예: "성수동 팝업", "부산 불꽃축제", "거제 야호", "안동 찜닭", "지리산 둘레길", "속초 아바이마을", "청계천")
-3. 단순 연예인 이름이나 게임제목만 있고 지역/장소 연결이 없으면 반드시 제외하세요.
-4. 원본 영상 제목 속 텍스트가 trendTitle에 포함되도록 하세요.
-5. 유효한 실존 엔티티가 1개뿐이면 1개만, 3개뿐이면 3개만 반환하세요.
+[엄격한 Entity 구분 및 추출 규칙]
+1. places(실존 장소): 다대포해수욕장, 성수연방, 서울숲, 덕포해수욕장, 롯데월드 처럼 "사람이 실제 방문할 수 있는 구체적인 장소명"만 허용하세요.
+   - 절대 금지 (places에 넣지 마세요): "폭염 속 데이트", "감성 여행", "데이트 장소", "여행 추천", "핫플 투어", "국내 여행", "바이럴 스팟", "힐링", "먹방", "데이트 코스" 등 문장이나 행동 표현!
+2. regions(행정지역): 서울, 부산, 제주, 거제, 안동, 성수, 홍대 등 실제 지역명만 허용.
+3. events(행사/축제/팝업): 부산바다축제, 서울세계불꽃축제, 성수팝업스토어 등 실제 행사/팝업명.
+4. foods(음식): 안동찜닭, 전주비빔밥 등 실제 음식명.
+5. trendTitle 생성: "regions + places" 또는 "events + places" 또는 "regions + events" 또는 "places" 형태로 실제 원본 텍스트의 고유명사를 조합하여 작성하세요. (가상 카테고리명 창작 절대 금지)
 
-[반환 JSON 구조 - 순수 JSON 배열만 반환]
-[
-  {
-    "trendTitle": "실존 대표 엔티티/장소/밈 (예: 거제 야호)",
-    "summary": "이 밈/장소가 왜 뜨고 있는지 1문장 서술",
-    "entities": {
-      "regions": ["지역명 (예: 거제, 서울)"],
-      "places": ["장소명 (예: 청계천)"],
-      "events": ["행사명"],
-      "foods": ["음식명"],
-      "memes": ["밈명"]
-    },
-    "tourismRelevance": "HIGH",
-    "sampleVideoIndex": 1
-  }
-]
+[반환 JSON 구조]
+{
+  "trends": [
+    {
+      "trendTitle": "실존 고유 엔티티 조합 (예: 부산 다대포해수욕장)",
+      "summary": "영상들에서 이 장소/행사가 뜨는 1문장 서술",
+      "entities": {
+        "regions": ["부산"],
+        "places": ["다대포해수욕장"],
+        "events": ["부산바다축제"],
+        "foods": [],
+        "artists": [],
+        "contents": [],
+        "memes": []
+      },
+      "sampleVideoIndex": 1,
+      "tourismRelevance": "HIGH"
+    }
+  ]
+}
 `;
 
       try {
@@ -170,33 +177,56 @@ ${videoSummariesStr}
 
         const rawText = aiRes.text || '';
         const cleanJson = rawText.replace(/```json/gi, '').replace(/```/g, '').trim();
-        extractedClusters = JSON.parse(cleanJson);
-        console.log(`Gemini 반환 Entity ${extractedClusters.length}개:`, JSON.stringify(extractedClusters, null, 2));
+        const parsedData = JSON.parse(cleanJson);
+        extractedClusters = Array.isArray(parsedData) ? parsedData : (parsedData.trends || []);
+        console.log(`Gemini Batch 반환 Entity ${extractedClusters.length}개:`, JSON.stringify(extractedClusters, null, 2));
       } catch (err) {
-        console.log('[Gemini API Fallback to Local Regex Extractor]:', err instanceof Error ? err.message : err);
-        // Quota Limit 시 수집 영상의 실존 텍스트에서 지역/장소 고유 엔티티 파싱
+        console.log('[Gemini API 429 Limit -> Switching to Conservative Fallback]:', err instanceof Error ? err.message : err);
+        extractionSource = 'fallback';
+
+        // 보수적 Local Fallback: 행동/문장 표현은 places에 절대 넣지 않음!
+        const knownRegions = ['성수', '부산', '서울', '안동', '속초', '거제', '제주', '강원', '인천', '전주', '경주', '대구'];
+        const knownPlaces = ['다대포해수욕장', '덕포해수욕장', '서울숲', '롯데월드', '청계천', '성수동', '해운대', '광안리'];
+        const knownEvents = ['바다축제', '불꽃축제', '물축제', '팝업스토어', '팝업'];
+
         extractedClusters = viralCandidates.slice(0, 10).map((v, i) => {
           const t = v.title;
-          const matchedReg = ['성수', '부산', '서울', '안동', '속초', '거제', '제주', '강원', '인천', '전주', '경주'].find((r) => t.includes(r));
-          const cleanTitle = t.replace(/\[.*?\]|\(.*?\)|#\S+/g, '').trim().slice(0, 20);
+          const matchedReg = knownRegions.find((r) => t.includes(r));
+          const matchedPlace = knownPlaces.find((p) => t.includes(p));
+          const matchedEvent = knownEvents.find((e) => t.includes(e));
+
+          if (!matchedReg && !matchedPlace && !matchedEvent) return null;
+
+          const title = matchedReg && matchedPlace
+            ? `${matchedReg} ${matchedPlace}`
+            : matchedReg && matchedEvent
+            ? `${matchedReg} ${matchedEvent}`
+            : matchedPlace || matchedEvent || matchedReg;
+
           return {
-            trendTitle: matchedReg ? `${matchedReg} ${cleanTitle.slice(0, 10)}` : cleanTitle.slice(0, 15),
+            trendTitle: title,
             summary: v.title,
             entities: {
-              regions: matchedReg ? [matchedReg] : ['국내'],
-              places: [cleanTitle.slice(0, 12)],
+              regions: matchedReg ? [matchedReg] : [],
+              places: matchedPlace ? [matchedPlace] : [],
+              events: matchedEvent ? [matchedEvent] : [],
+              foods: [],
+              artists: [],
+              contents: [],
+              memes: [],
             },
             tourismRelevance: 'HIGH',
             sampleVideoIndex: i + 1,
           };
-        }).filter((c) => c.trendTitle && c.trendTitle.length > 2);
+        }).filter(Boolean);
       }
     }
 
-    // Generic Blacklist
+    // Generic & Place Blacklist
     const genericBlacklist = new Set([
       '국내', '여행', '관광', '핫플', '핫플레이스', '바이럴', '스팟', '명소', '투어', '체험',
-      '여행지', '관광지', '데이트', '추천', '브이로그', '국내 바이럴 스팟', '인기 스팟', '바이럴 스팟'
+      '여행지', '관광지', '데이트', '추천', '브이로그', '국내 바이럴 스팟', '인기 스팟', '바이럴 스팟',
+      '폭염 속 데이트', '감성 여행', '데이트 장소', '여행 추천', '핫플 투어', '먹방', '데이트 코스'
     ]);
 
     // [6] EVIDENCE & [7] TOURISM & [8] DEDUP FILTER
@@ -213,10 +243,15 @@ ${videoSummariesStr}
         continue;
       }
 
-      // Evidence Filter: 전 전체 수집 영상의 텍스트 비교 (부분 포함 검색)
+      // places 배열 정제: 불법 장소 표현("폭염 속 데이트" 등) 필터링
+      const ents = cluster.entities || {};
+      if (Array.isArray(ents.places)) {
+        ents.places = ents.places.filter((p) => !genericBlacklist.has(p) && !p.includes('데이트') && !p.includes('여행') && !p.includes('투어'));
+      }
+
+      // Evidence Filter: 전 수집 영상 텍스트 검증
       const sampleVid = viralCandidates[(cluster.sampleVideoIndex || 1) - 1] || viralCandidates[0];
       const allText = viralCandidates.map((v) => `${v.title} ${v.description} ${v.tags.join(' ')}`).join(' ');
-      const ents = cluster.entities || {};
 
       const titleMatched = allText.includes(rawTitle);
       const regionMatched = (ents.regions || []).some((r) => allText.includes(r));
@@ -227,7 +262,7 @@ ${videoSummariesStr}
         continue;
       }
 
-      // 3. Tourism Filter (region, place, event, food 중 최소 1개 필수)
+      // Tourism Filter: region, place, event, food 중 최소 1개 필수
       const hasTourismEntity =
         (ents.regions && ents.regions.length > 0) ||
         (ents.places && ents.places.length > 0) ||
@@ -239,7 +274,7 @@ ${videoSummariesStr}
         continue;
       }
 
-      // 4. Deduplication Filter
+      // Deduplication Filter
       const normalizedTitle = rawTitle.replace(/\s+/g, '').toLowerCase();
       if (seenTitles.has(normalizedTitle)) {
         console.log(`[Deduplication] DROP_DEDUP: "${rawTitle}"`);
@@ -250,9 +285,11 @@ ${videoSummariesStr}
       validClusters.push({
         ...cluster,
         trendTitle: rawTitle,
+        entities: ents,
         sampleVid,
+        extractionSource,
       });
-      console.log(`[PASS] 유효 트렌드 선정: "${rawTitle}"`);
+      console.log(`[PASS] 유효 트렌드 선정: "${rawTitle}" (source: ${extractionSource})`);
     }
 
     console.log(`\n=================== [9] NAVER & FINAL ===================`);
