@@ -137,6 +137,9 @@ export default function OpportunityDetail({ selectedEcho, areaCode = 1, onSelect
         aiAnalysis,
         relatedSpots,
         visitorData,
+        userTarget: userTarget || undefined,
+        userBudget: userBudget || undefined,
+        userDuration: userDuration || undefined,
       });
       setProductIdeas(ideas);
     } catch {
@@ -287,82 +290,86 @@ export default function OpportunityDetail({ selectedEcho, areaCode = 1, onSelect
 
       {/* [2. AI 상품 아이디어 만들기] */}
       <div className="pt-2 border-t border-neutral-100 space-y-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <h2 className="text-sm font-black text-neutral-900 tracking-tight">
-              AI 관광상품 아이디어
-            </h2>
-            <p className="text-xs text-neutral-400 mt-0.5">
-              관광자원 검증 결과를 바탕으로 AI가 3가지 상품 아이디어를 생성합니다.
-            </p>
-          </div>
-
-          {productIdeas.length === 0 && (
-            <button
-              onClick={handleGenerateIdeas}
-              disabled={ideasLoading}
-              className="bg-neutral-900 hover:bg-neutral-800 text-white font-bold text-xs px-4 py-2.5 rounded-xl shadow transition-all flex items-center space-x-1.5 disabled:opacity-50"
-            >
-              {ideasLoading ? (
-                <span>아이디어 기획 중...</span>
-              ) : (
-                <>
-                  <Sparkles className="w-4 h-4 text-amber-400" />
-                  <span>AI 상품 아이디어 만들기</span>
-                </>
-              )}
-            </button>
-          )}
+        <div>
+          <h2 className="text-sm font-black text-neutral-900 tracking-tight">
+            AI 관광상품 아이디어
+          </h2>
+          <p className="text-xs text-neutral-400 mt-0.5">
+            타깃·예산·기간을 먼저 정하면 AI가 그에 맞춰 3가지 상품 아이디어를 생성합니다.
+          </p>
         </div>
 
-        {/* ⑤ Generation settings — applied when developing an idea */}
-        {productIdeas.length > 0 && (
-          <div className="bg-neutral-50 rounded-2xl border border-neutral-200 p-3.5 space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="text-[11px] font-bold text-neutral-700">상품 설정 (선택)</span>
-              <span className="text-[9.5px] text-neutral-400">설정 후 아이디어를 발전시키면 AI가 반영합니다</span>
+        {/* ⑤ Generation settings — set BEFORE generating; applied to ideas AND detailed product */}
+        <div className="bg-neutral-50 rounded-2xl border border-neutral-200 p-3.5 space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-bold text-neutral-700">상품 설정</span>
+            <span className="text-[9.5px] text-neutral-400">설정값을 AI 생성에 반영합니다</span>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+            <div>
+              <label className="text-[9.5px] font-bold text-neutral-500 block mb-1">타깃 고객</label>
+              <select
+                value={userTarget}
+                onChange={(e) => setUserTarget(e.target.value)}
+                className="w-full text-xs px-2.5 py-2 rounded-lg border border-neutral-200 bg-white focus:border-neutral-900 outline-none"
+              >
+                <option value="">AI 추천</option>
+                <option value="2030 커플">2030 커플</option>
+                <option value="가족 단위">가족 단위</option>
+                <option value="외국인 관광객">외국인 관광객</option>
+                <option value="4050 부부">4050 부부</option>
+                <option value="친구·우정 여행">친구·우정 여행</option>
+                <option value="나홀로 여행">나홀로 여행</option>
+                <option value="MZ 직장인">MZ 직장인</option>
+                <option value="시니어 (5060)">시니어 (5060)</option>
+              </select>
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-              <div>
-                <label className="text-[9.5px] font-bold text-neutral-500 block mb-1">타깃 고객</label>
-                <input
-                  value={userTarget}
-                  onChange={(e) => setUserTarget(e.target.value)}
-                  placeholder="예: 2030 커플, 가족, 외국인"
-                  className="w-full text-xs px-2.5 py-2 rounded-lg border border-neutral-200 bg-white focus:border-neutral-900 outline-none"
-                />
-              </div>
-              <div>
-                <label className="text-[9.5px] font-bold text-neutral-500 block mb-1">1인 예산</label>
-                <select
-                  value={userBudget}
-                  onChange={(e) => setUserBudget(e.target.value)}
-                  className="w-full text-xs px-2.5 py-2 rounded-lg border border-neutral-200 bg-white focus:border-neutral-900 outline-none"
-                >
-                  <option value="">제한 없음</option>
-                  <option value="3만원 이하">3만원 이하</option>
-                  <option value="5만원 내외">5만원 내외</option>
-                  <option value="10만원 내외">10만원 내외</option>
-                  <option value="15만원 이상">15만원 이상</option>
-                </select>
-              </div>
-              <div>
-                <label className="text-[9.5px] font-bold text-neutral-500 block mb-1">기간</label>
-                <select
-                  value={userDuration}
-                  onChange={(e) => setUserDuration(e.target.value)}
-                  className="w-full text-xs px-2.5 py-2 rounded-lg border border-neutral-200 bg-white focus:border-neutral-900 outline-none"
-                >
-                  <option value="">AI 추천</option>
-                  <option value="반일 (3~4시간)">반일 (3~4시간)</option>
-                  <option value="당일 (1일)">당일 (1일)</option>
-                  <option value="1박 2일">1박 2일</option>
-                  <option value="2박 3일">2박 3일</option>
-                </select>
-              </div>
+            <div>
+              <label className="text-[9.5px] font-bold text-neutral-500 block mb-1">1인 예산</label>
+              <select
+                value={userBudget}
+                onChange={(e) => setUserBudget(e.target.value)}
+                className="w-full text-xs px-2.5 py-2 rounded-lg border border-neutral-200 bg-white focus:border-neutral-900 outline-none"
+              >
+                <option value="">제한 없음</option>
+                <option value="3만원 이하">3만원 이하</option>
+                <option value="5만원 내외">5만원 내외</option>
+                <option value="10만원 내외">10만원 내외</option>
+                <option value="15만원 이상">15만원 이상</option>
+              </select>
+            </div>
+            <div>
+              <label className="text-[9.5px] font-bold text-neutral-500 block mb-1">기간</label>
+              <select
+                value={userDuration}
+                onChange={(e) => setUserDuration(e.target.value)}
+                className="w-full text-xs px-2.5 py-2 rounded-lg border border-neutral-200 bg-white focus:border-neutral-900 outline-none"
+              >
+                <option value="">AI 추천</option>
+                <option value="반일 (3~4시간)">반일 (3~4시간)</option>
+                <option value="당일 (1일)">당일 (1일)</option>
+                <option value="1박 2일">1박 2일</option>
+                <option value="2박 3일">2박 3일</option>
+              </select>
             </div>
           </div>
-        )}
+        </div>
+
+        {/* Generate (or regenerate with current settings) */}
+        <button
+          onClick={handleGenerateIdeas}
+          disabled={ideasLoading}
+          className="w-full sm:w-auto bg-neutral-900 hover:bg-neutral-800 text-white font-bold text-xs px-4 py-2.5 rounded-xl shadow transition-all inline-flex items-center justify-center space-x-1.5 disabled:opacity-50"
+        >
+          {ideasLoading ? (
+            <span>아이디어 기획 중...</span>
+          ) : (
+            <>
+              <Sparkles className="w-4 h-4 text-amber-400" />
+              <span>{productIdeas.length > 0 ? '설정 반영해 다시 생성' : 'AI 상품 아이디어 만들기'}</span>
+            </>
+          )}
+        </button>
 
         {/* Display 3 Product Ideas */}
         {productIdeas.length > 0 && (

@@ -81,7 +81,12 @@ const productIdeasCache = new Map<string, ProductIdea[]>();
  * 0. AI 관광상품 아이디어 3개 생성 함수
  */
 export async function generateProductIdeas(input: TourProductInput): Promise<ProductIdea[]> {
-  const cacheKey = (input.contentid || input.title || 'default') + '-ideas';
+  const cacheKey = [
+    input.contentid || input.title || 'default',
+    input.userTarget || '',
+    input.userBudget || '',
+    input.userDuration || '',
+  ].join('|') + '-ideas';
   if (productIdeasCache.has(cacheKey)) {
     return productIdeasCache.get(cacheKey)!;
   }

@@ -554,6 +554,18 @@ app.post('/api/generate-tour-product-ideas', async (req, res) => {
   const score = input.score ?? 85;
   const aiSummary = input.aiAnalysis?.summary || '방문 수요 및 로컬 관광 연계 가능성 우수';
 
+  // User-specified constraints (⑤ settings) applied to the idea generation.
+  const iTarget = (input.userTarget || '').trim();
+  const iBudget = (input.userBudget || '').trim();
+  const iDuration = (input.userDuration || '').trim();
+  const iConstraints = [];
+  if (iTarget) iConstraints.push(`- 3개 아이디어 모두 타깃 고객을 "${iTarget}"로 맞추고 각 아이디어의 target 필드에 반영할 것.`);
+  if (iBudget) iConstraints.push(`- 1인 예산 "${iBudget}" 수준에서 실현 가능한 컨셉으로 기획할 것.`);
+  if (iDuration) iConstraints.push(`- 상품 기간 "${iDuration}"에 적합한 규모로 기획할 것.`);
+  const iConstraintBlock = iConstraints.length > 0
+    ? `\n[사용자 지정 제약 — 반드시 반영]\n${iConstraints.join('\n')}\n`
+    : '';
+
   const prompt = `
 당신은 대한민국 대표 인바운드/로컬 관광상품 전문 기획 MD입니다.
 한국관광공사 TourAPI 및 관광 빅데이터 분석 결과를 바탕으로, 아래 관광지에 대한 차별화된 "관광상품 아이디어 3개"를 기획해 주세요.
@@ -564,7 +576,7 @@ app.post('/api/generate-tour-product-ideas', async (req, res) => {
 - Opportunity Score: ${score}점
 - 상세 개요: ${overview}
 - AI 진단 요약: ${aiSummary}
-
+${iConstraintBlock}
 [기획 원칙]
 1. 단순 여행 추천이 아닌 실제 상품화가 가능한 정교한 컨셉 3개를 제안하세요.
 2. 각각의 아이디어는 타겟 고객층과 기획 이유가 명확해야 합니다.
