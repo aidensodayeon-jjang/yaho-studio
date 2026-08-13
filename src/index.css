@@ -37,6 +37,12 @@
   to { transform: scale(1); opacity: 1; }
 }
 
+@keyframes shimmer {
+  100% {
+    transform: translateX(100%);
+  }
+}
+
 /* Custom global rules and scrollbars */
 html, body {
   background-color: #fafafa;

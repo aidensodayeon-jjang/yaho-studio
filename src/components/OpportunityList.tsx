@@ -2,6 +2,7 @@ import { EchoCard } from '../types';
 import { TourSpotItem } from '../api/tourApi';
 import { tourSpotToEchoCard } from '../utils/tourSpotAdapter';
 import { AlertCircle, ArrowRight } from 'lucide-react';
+import { LoadingSkeleton } from './LoadingSkeleton';
 
 interface OpportunityListProps {
   selectedKeyword?: string;
@@ -47,10 +48,11 @@ export default function OpportunityList({
       </div>
 
       {loading ? (
-        <div className="flex flex-col items-center justify-center py-12 bg-white rounded-2xl border border-neutral-200 text-neutral-500 text-xs">
-          <div className="w-5 h-5 border-2 border-neutral-900 border-t-transparent rounded-full animate-spin mb-2"></div>
-          <span>한국관광공사 데이터를 분석하여 관광 기회를 찾고 있습니다...</span>
-        </div>
+        <LoadingSkeleton
+          message={selectedKeyword ? `"${selectedKeyword}" 관광자원 분석 중` : '관광자원 데이터 분석 중'}
+          subMessage="한국관광공사 API 및 소셜 트렌드 데이터를 실시간으로 연동하고 있습니다"
+          type="card-grid"
+        />
       ) : error ? (
         <div className="flex flex-col items-center justify-center py-8 bg-red-50 rounded-2xl border border-red-200 text-red-600 text-xs px-4">
           <AlertCircle className="w-5 h-5 mb-1 text-red-500" />

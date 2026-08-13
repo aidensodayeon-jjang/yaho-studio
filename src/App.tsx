@@ -4,17 +4,26 @@ import OpportunityDetail from './components/OpportunityDetail';
 import { Search, TrendingUp, Sparkles, KeyRound } from 'lucide-react';
 import { useTourData } from './hooks/useTourData';
 import { useNaverTrends } from './hooks/useNaverTrends';
-import { useYouTubePopularTrends } from './hooks/useYouTubePopularTrends';
+import { useYouTubePopularTrends, YouTubePopularTrendItem } from './hooks/useYouTubePopularTrends';
 import { EchoCard } from './types';
+import { LoadingSkeleton } from './components/LoadingSkeleton';
 
 export default function App() {
   const [areaCode, setAreaCode] = useState<number | undefined>(undefined);
   const [searchInput, setSearchInput] = useState('');
   const [keyword, setKeyword] = useState('거제 야호');
   const [selectedKeyword, setSelectedKeyword] = useState('거제 야호');
+  // When a discovered trend is selected, its structured entities drive the
+  // TourAPI POI lookup instead of the raw title. null for manual searches.
+  const [selectedTrend, setSelectedTrend] = useState<YouTubePopularTrendItem | null>(null);
 
   const { trends: autoDiscoveredTrends, loading: popularYtLoading, error: popularYtError } = useYouTubePopularTrends();
-  const { data: tourData, loading: tourLoading, error: tourError, isNationwideFallback } = useTourData(areaCode || 1, 12, keyword);
+  const { data: tourData, loading: tourLoading, error: tourError, isNationwideFallback } = useTourData(
+    areaCode || 1,
+    12,
+    keyword,
+    selectedTrend?.entities
+  );
   const [selectedEcho, setSelectedEcho] = useState<EchoCard | null>(null);
 
   // autoDiscoveredTrends 로드 결과에 따른 state 동기화 & 에러 시 clear
@@ -23,9 +32,10 @@ export default function App() {
       setSelectedEcho(null);
     } else if (autoDiscoveredTrends.length > 0) {
       // 수집 성공 시 첫 번째 트렌드로 기본 선택 동기화
-      const firstTitle = autoDiscoveredTrends[0].title;
-      setKeyword(firstTitle);
-      setSelectedKeyword(firstTitle);
+      const first = autoDiscoveredTrends[0];
+      setKeyword(first.title);
+      setSelectedKeyword(first.title);
+      setSelectedTrend(first);
     }
   }, [autoDiscoveredTrends, popularYtError]);
 
@@ -35,19 +45,22 @@ export default function App() {
     if (trimmed) {
       setKeyword(trimmed);
       setSelectedKeyword(trimmed);
+      setSelectedTrend(null); // manual search: no structured entities
     }
   };
 
-  const handleSelectTrendKeyword = (kw: string) => {
-    setSearchInput(kw);
-    setKeyword(kw);
-    setSelectedKeyword(kw);
+  const handleSelectTrend = (trend: YouTubePopularTrendItem) => {
+    setSearchInput(trend.title);
+    setKeyword(trend.title);
+    setSelectedKeyword(trend.title);
+    setSelectedTrend(trend); // entity-driven POI lookup
   };
 
   const handleClearSearch = () => {
     setSearchInput('');
     setKeyword('러닝');
     setSelectedKeyword('러닝');
+    setSelectedTrend(null);
   };
 
   const regions = [
@@ -144,9 +157,7 @@ export default function App() {
           </div>
 
           {popularYtLoading ? (
-            <div className="bg-white rounded-2xl p-6 border border-neutral-200 text-center text-xs text-neutral-400">
-              YouTube 소셜 바이럴 신호(최근 7일)를 분석하여 실제 관광 트렌드/장소를 탐지하고 있습니다...
-            </div>
+            <LoadingSkeleton type="trend-list" />
           ) : autoDiscoveredTrends.length === 0 ? (
             <div className="bg-white rounded-2xl p-6 border border-neutral-200 text-center text-xs text-neutral-500">
               YouTube 트렌드 데이터를 불러오지 못했습니다.
@@ -159,7 +170,7 @@ export default function App() {
                 return (
                   <div
                     key={t.title}
-                    onClick={() => handleSelectTrendKeyword(t.title)}
+                    onClick={() => handleSelectTrend(t)}
                     className={`bg-white rounded-2xl border p-3 cursor-pointer transition-all flex flex-col justify-between space-y-2 ${
                       isSelected
                         ? 'border-neutral-900 ring-2 ring-neutral-900 bg-neutral-50/40 shadow-sm'
