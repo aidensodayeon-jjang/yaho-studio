@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react';
 export interface YouTubePopularTrendItem {
   title: string;
   summary: string;
+  trendScore: number;
   entities?: {
     people?: string[];
     artists?: string[];
@@ -18,11 +19,20 @@ export interface YouTubePopularTrendItem {
     videoTitle: string;
     channelTitle: string;
     viewCount: number;
+    viewVelocity: number;
+    videoCount: number;
+    sourceVideoIds: string[];
   };
   naverSignal: {
     changeRate: number | null;
     trend: string;
   };
+  tourism?: {
+    score: number;
+    reason: string;
+  };
+  poiName?: string | null;
+  poiRegion?: string | null;
 }
 
 export function useYouTubePopularTrends() {
@@ -41,7 +51,9 @@ export function useYouTubePopularTrends() {
         }
         const json = await response.json();
         if (isMounted) {
-          if (json.success && Array.isArray(json.data)) {
+          if (Array.isArray(json)) {
+            setTrends(json);
+          } else if (json.success && Array.isArray(json.data)) {
             setTrends(json.data);
           } else {
             setTrends([]);
