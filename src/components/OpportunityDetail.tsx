@@ -78,6 +78,11 @@ export default function OpportunityDetail({ selectedEcho, areaCode = 1, onSelect
   const [detailedProduct, setDetailedProduct] = useState<TourProductResult | null>(null);
   const [detailedLoading, setDetailedLoading] = useState<boolean>(false);
 
+  // ⑤ User-specified generation settings (target / budget / duration)
+  const [userTarget, setUserTarget] = useState<string>('');
+  const [userBudget, setUserBudget] = useState<string>('');
+  const [userDuration, setUserDuration] = useState<string>('');
+
   // Step 3 Expandable Accordion State
   const [isDataExpanded, setIsDataExpanded] = useState<boolean>(false);
 
@@ -163,6 +168,9 @@ export default function OpportunityDetail({ selectedEcho, areaCode = 1, onSelect
         trendDirection: activeTrend?.trendDirection,
         trendChangeRate: activeTrend?.changeRate,
         selectedIdea: idea,
+        userTarget: userTarget || undefined,
+        userBudget: userBudget || undefined,
+        userDuration: userDuration || undefined,
       });
       setDetailedProduct(product);
     } catch {
@@ -306,6 +314,55 @@ export default function OpportunityDetail({ selectedEcho, areaCode = 1, onSelect
             </button>
           )}
         </div>
+
+        {/* ⑤ Generation settings — applied when developing an idea */}
+        {productIdeas.length > 0 && (
+          <div className="bg-neutral-50 rounded-2xl border border-neutral-200 p-3.5 space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-bold text-neutral-700">상품 설정 (선택)</span>
+              <span className="text-[9.5px] text-neutral-400">설정 후 아이디어를 발전시키면 AI가 반영합니다</span>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+              <div>
+                <label className="text-[9.5px] font-bold text-neutral-500 block mb-1">타깃 고객</label>
+                <input
+                  value={userTarget}
+                  onChange={(e) => setUserTarget(e.target.value)}
+                  placeholder="예: 2030 커플, 가족, 외국인"
+                  className="w-full text-xs px-2.5 py-2 rounded-lg border border-neutral-200 bg-white focus:border-neutral-900 outline-none"
+                />
+              </div>
+              <div>
+                <label className="text-[9.5px] font-bold text-neutral-500 block mb-1">1인 예산</label>
+                <select
+                  value={userBudget}
+                  onChange={(e) => setUserBudget(e.target.value)}
+                  className="w-full text-xs px-2.5 py-2 rounded-lg border border-neutral-200 bg-white focus:border-neutral-900 outline-none"
+                >
+                  <option value="">제한 없음</option>
+                  <option value="3만원 이하">3만원 이하</option>
+                  <option value="5만원 내외">5만원 내외</option>
+                  <option value="10만원 내외">10만원 내외</option>
+                  <option value="15만원 이상">15만원 이상</option>
+                </select>
+              </div>
+              <div>
+                <label className="text-[9.5px] font-bold text-neutral-500 block mb-1">기간</label>
+                <select
+                  value={userDuration}
+                  onChange={(e) => setUserDuration(e.target.value)}
+                  className="w-full text-xs px-2.5 py-2 rounded-lg border border-neutral-200 bg-white focus:border-neutral-900 outline-none"
+                >
+                  <option value="">AI 추천</option>
+                  <option value="반일 (3~4시간)">반일 (3~4시간)</option>
+                  <option value="당일 (1일)">당일 (1일)</option>
+                  <option value="1박 2일">1박 2일</option>
+                  <option value="2박 3일">2박 3일</option>
+                </select>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Display 3 Product Ideas */}
         {productIdeas.length > 0 && (

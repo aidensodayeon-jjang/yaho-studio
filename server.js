@@ -634,6 +634,18 @@ app.post('/api/generate-tour-product', async (req, res) => {
   const relatedNames = (input.relatedSpots || []).slice(0, 5).map((s) => s.title);
   const relatedNamesStr = relatedNames.length > 0 ? relatedNames.join(', ') : '없음 (단독 스팟 구성)';
 
+  // User-specified constraints (⑤ settings) — these OVERRIDE the idea defaults.
+  const userTarget = (input.userTarget || '').trim();
+  const userBudget = (input.userBudget || '').trim();
+  const userDuration = (input.userDuration || '').trim();
+  const constraintLines = [];
+  if (userTarget) constraintLines.push(`- 타깃 고객: 반드시 "${userTarget}"에 맞춰 기획하고 targetCustomers에 이 값을 반영할 것.`);
+  if (userBudget) constraintLines.push(`- 1인 예산: "${userBudget}" 내외로 estimatedPrice와 코스 구성을 맞출 것. 이 예산을 크게 초과하지 말 것.`);
+  if (userDuration) constraintLines.push(`- 상품 기간: "${userDuration}" 기준으로 duration과 itinerary(일자/동선)를 구성할 것.`);
+  const constraintBlock = constraintLines.length > 0
+    ? `\n[사용자 지정 제약 — 아이디어 기본값보다 최우선으로 반영]\n${constraintLines.join('\n')}\n`
+    : '';
+
   const prompt = `
 당신은 대한민국 한국관광공사 TourAPI 데이터 및 관광 빅데이터 분석 전문 인바운드/로컬 관광상품 기획 전문 MD입니다.
 사용자가 선택한 특정 관광상품 아이디어([${selectedIdeaTitle}])를 바탕으로 실제 판매 가능한 정교하고 구조화된 상세 관광상품 기획안(JSON)을 작성해 주세요.
@@ -643,7 +655,7 @@ app.post('/api/generate-tour-product', async (req, res) => {
 - 컨셉: ${selectedIdeaConcept}
 - 타깃 고객: ${selectedIdeaTarget}
 - 기획 배경: ${selectedIdeaReason}
-
+${constraintBlock}
 [관광상품 설계 핵심 원칙]
 1. 선택된 아이디어를 바탕으로 실제 상품 기획서를 구체화할 것.
 2. 전달받은 연관 관광지 목록([${relatedNamesStr}])을 최대한 활용해 실제 이동 동선 및 추천 코스(itinerary)를 설계할 것. 가상의 미확인 장소를 임의로 지어내지 말 것.

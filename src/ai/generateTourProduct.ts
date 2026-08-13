@@ -67,6 +67,10 @@ export interface TourProductInput {
   trendChangeRate?: number;
   hasOriginalImage?: boolean;
   selectedIdea?: ProductIdea | null;
+  // User-specified generation constraints (⑤ settings)
+  userTarget?: string;
+  userBudget?: string;
+  userDuration?: string;
 }
 
 // 메모리 캐시 저장소 (Key: contentid 또는 title)
@@ -257,7 +261,16 @@ export function generateRuleBasedTourProduct(input: TourProductInput): TourProdu
  * 2. 서버 백엔드 API (/api/generate-tour-product) 호출 함수
  */
 export async function generateTourProduct(input: TourProductInput): Promise<TourProductResult> {
-  const cacheKey = input.contentid || input.title || 'default';
+  // Cache key includes the selected idea AND user settings, so choosing a
+  // different idea or changing target/budget/duration regenerates instead of
+  // returning a stale cached product.
+  const cacheKey = [
+    input.contentid || input.title || 'default',
+    input.selectedIdea?.title || '',
+    input.userTarget || '',
+    input.userBudget || '',
+    input.userDuration || '',
+  ].join('|');
   if (tourProductCache.has(cacheKey)) {
     return tourProductCache.get(cacheKey)!;
   }
@@ -314,10 +327,12 @@ export async function generateTourProduct(input: TourProductInput): Promise<Tour
     const result: TourProductResult = {
       productName: String(parsed.productName || `${title} 로컬 콤보 투어`),
       concept: String(parsed.concept || `${title} 중심의 검증된 로컬 가이드 패키지`),
-      targetCustomers: Array.isArray(parsed.targetCustomers) ? parsed.targetCustomers.map(String) : ['2030 자유여행객'],
-      duration: String(parsed.duration || '2박 3일'),
+      targetCustomers: Array.isArray(parsed.targetCustomers) && parsed.targetCustomers.length > 0
+        ? parsed.targetCustomers.map(String)
+        : (input.userTarget ? [input.userTarget] : ['2030 자유여행객']),
+      duration: String(parsed.duration || input.userDuration || '2박 3일'),
       transportation: String(parsed.transportation || '전용 리무진'),
-      estimatedPrice: String(parsed.estimatedPrice || '1인당 35,000원 ~ 49,000원'),
+      estimatedPrice: String(parsed.estimatedPrice || (input.userBudget ? `1인당 ${input.userBudget} 내외` : '1인당 35,000원 ~ 49,000원')),
       opportunityReason: String(parsed.opportunityReason || '지역 방문자 및 연계 관광 데이터 지표 우수'),
       differentiation: String(parsed.differentiation || '독창적 로컬 동선 및 체류시간 증대 효과'),
       itinerary: itinerary.length > 0 ? itinerary : [
@@ -332,12 +347,14 @@ export async function generateTourProduct(input: TourProductInput): Promise<Tour
 
       // 하위 호환 필드
       oneLineIntro: String(parsed.concept || `${title} 로컬 패키지`),
-      targetCustomer: Array.isArray(parsed.targetCustomers) ? parsed.targetCustomers.join(', ') : '2030 여행객',
+      targetCustomer: Array.isArray(parsed.targetCustomers) && parsed.targetCustomers.length > 0
+        ? parsed.targetCustomers.join(', ')
+        : (input.userTarget || '2030 여행객'),
       recommendedSeason: '사계절 추천',
       course: courseSteps.length > 0 ? courseSteps : generateRuleBasedTourProduct(input).course,
       keyExperience: Array.isArray(parsed.marketingPoints) ? parsed.marketingPoints.map(String) : [`${title} 가이드 탐방`],
       operationPlan: String(parsed.transportation || '소규모 전용 가이드 투어'),
-      priceGuide: String(parsed.estimatedPrice || '1인당 35,000원 ~ 49,000원'),
+      priceGuide: String(parsed.estimatedPrice || (input.userBudget ? `1인당 ${input.userBudget} 내외` : '1인당 35,000원 ~ 49,000원')),
       snsCopy: `📍 [${title}] AI가 강추하는 로컬 관광상품 코스 공개!`,
       hashtags: [`#${title.replace(/\s+/g, '')}`, `#YAHO스튜디오`],
       cautions: ['운영 전 현동선 실측 필요'],
