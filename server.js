@@ -2,6 +2,7 @@ import express from 'express';
 import dotenv from 'dotenv';
 import { GoogleGenAI } from '@google/genai';
 import { discoverTrends, extractEntities } from './trend-discovery.js';
+import { llmGenerateJson } from './llm.js';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
@@ -540,10 +541,11 @@ app.get('/api/trends', async (req, res) => {
 // 1. POST /api/generate-tour-product-ideas (새 1단계: 3개 아이디어 생성)
 app.post('/api/generate-tour-product-ideas', async (req, res) => {
   const input = req.body || {};
+  const openaiKey = process.env.OPENAI_API_KEY?.trim();
   const apiKey = process.env.GEMINI_API_KEY?.trim();
 
-  if (!apiKey) {
-    return res.status(400).json({ error: 'GEMINI_API_KEY가 서버에 설정되어 있지 않습니다.' });
+  if (!openaiKey && !apiKey) {
+    return res.status(400).json({ error: 'OPENAI_API_KEY 또는 GEMINI_API_KEY가 서버에 설정되어 있지 않습니다.' });
   }
 
   const title = input.title || '관광지';
@@ -567,48 +569,48 @@ app.post('/api/generate-tour-product-ideas', async (req, res) => {
 1. 단순 여행 추천이 아닌 실제 상품화가 가능한 정교한 컨셉 3개를 제안하세요.
 2. 각각의 아이디어는 타겟 고객층과 기획 이유가 명확해야 합니다.
 3. 3개 아이디어의 색깔(컨셉, 타깃, 스타일)이 서로 다르고 독창적이어야 합니다.
-4. 순수한 JSON 배열만 반환하세요. 마크다운(\`\`\`json 등)은 금지합니다.
+4. 순수한 JSON 객체만 반환하세요. 마크다운(\`\`\`json 등)은 금지합니다.
 
 [반환 JSON 형상]
-[
-  {
-    "title": "아이디어 제목 1 (예: 홍제천 NIGHT WALK)",
-    "oneLineConcept": "한 줄 컨셉 설명",
-    "target": "타깃 고객층 (예: 2030 직장인 & 연인)",
-    "reason": "이 아이디어를 제안하는 데이터/기획적 근거",
-    "tags": ["태그1", "태그2", "태그3"]
-  },
-  {
-    "title": "아이디어 제목 2",
-    "oneLineConcept": "한 줄 컨셉 설명",
-    "target": "타깃 고객층",
-    "reason": "이 아이디어를 제안하는 데이터/기획적 근거",
-    "tags": ["태그1", "태그2", "태그3"]
-  },
-  {
-    "title": "아이디어 제목 3",
-    "oneLineConcept": "한 줄 컨셉 설명",
-    "target": "타깃 고객층",
-    "reason": "이 아이디어를 제안하는 데이터/기획적 근거",
-    "tags": ["태그1", "태그2", "태그3"]
-  }
-]
+{
+  "ideas": [
+    {
+      "title": "아이디어 제목 1 (예: 홍제천 NIGHT WALK)",
+      "oneLineConcept": "한 줄 컨셉 설명",
+      "target": "타깃 고객층 (예: 2030 직장인 & 연인)",
+      "reason": "이 아이디어를 제안하는 데이터/기획적 근거",
+      "tags": ["태그1", "태그2", "태그3"]
+    },
+    {
+      "title": "아이디어 제목 2",
+      "oneLineConcept": "한 줄 컨셉 설명",
+      "target": "타깃 고객층",
+      "reason": "이 아이디어를 제안하는 데이터/기획적 근거",
+      "tags": ["태그1", "태그2", "태그3"]
+    },
+    {
+      "title": "아이디어 제목 3",
+      "oneLineConcept": "한 줄 컨셉 설명",
+      "target": "타깃 고객층",
+      "reason": "이 아이디어를 제안하는 데이터/기획적 근거",
+      "tags": ["태그1", "태그2", "태그3"]
+    }
+  ]
+}
 `;
 
   try {
-    const ai = new GoogleGenAI({ apiKey });
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
-      contents: prompt,
+    const { data: parsed, provider } = await llmGenerateJson({
+      user: prompt,
+      openaiKey,
+      geminiKey: apiKey,
+      temperature: 0.8,
     });
-
-    const rawText = response.text || '';
-    const cleanJsonText = rawText.replace(/```json/gi, '').replace(/```/g, '').trim();
-    const parsed = JSON.parse(cleanJsonText);
-
-    return res.json({ success: true, data: parsed, generatedBy: 'gemini' });
+    // Accept both { ideas: [...] } and a bare array (Gemini fallback may return either).
+    const ideas = Array.isArray(parsed) ? parsed : parsed.ideas || [];
+    return res.json({ success: true, data: ideas, generatedBy: provider });
   } catch (err) {
-    const errorMsg = err instanceof Error ? err.message : 'Gemini API 아이디어 생성 중 에러가 발생했습니다.';
+    const errorMsg = err instanceof Error ? err.message : 'AI 아이디어 생성 중 에러가 발생했습니다.';
     return res.status(500).json({ error: errorMsg });
   }
 });
@@ -616,10 +618,11 @@ app.post('/api/generate-tour-product-ideas', async (req, res) => {
 // 2. POST /api/generate-tour-product (기존 2단계: 선택된 아이디어를 발전시켜 상세 기획서 생성)
 app.post('/api/generate-tour-product', async (req, res) => {
   const input = req.body || {};
+  const openaiKey = process.env.OPENAI_API_KEY?.trim();
   const apiKey = process.env.GEMINI_API_KEY?.trim();
 
-  if (!apiKey) {
-    return res.status(400).json({ error: 'GEMINI_API_KEY가 서버에 설정되어 있지 않습니다.' });
+  if (!openaiKey && !apiKey) {
+    return res.status(400).json({ error: 'OPENAI_API_KEY 또는 GEMINI_API_KEY가 서버에 설정되어 있지 않습니다.' });
   }
 
   const title = input.title || '관광지';
@@ -680,30 +683,27 @@ app.post('/api/generate-tour-product', async (req, res) => {
 `;
 
   try {
-    const ai = new GoogleGenAI({ apiKey });
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
-      contents: prompt,
+    const { data: parsed, provider } = await llmGenerateJson({
+      user: prompt,
+      openaiKey,
+      geminiKey: apiKey,
+      temperature: 0.7,
     });
-
-    const rawText = response.text || '';
-    const cleanJsonText = rawText.replace(/```json/gi, '').replace(/```/g, '').trim();
-    const parsed = JSON.parse(cleanJsonText);
-
-    return res.json({ success: true, data: parsed, generatedBy: 'gemini' });
+    return res.json({ success: true, data: parsed, generatedBy: provider });
   } catch (err) {
-    const errorMsg = err instanceof Error ? err.message : 'Gemini API 호출 중 에러가 발생했습니다.';
+    const errorMsg = err instanceof Error ? err.message : 'AI 상품 기획 호출 중 에러가 발생했습니다.';
     return res.status(500).json({ error: errorMsg });
   }
 });
 
-// 3. POST /api/analyze-opportunity (기존 AI Opportunity Analysis 유지)
+// 3. POST /api/analyze-opportunity (AI Opportunity Analysis — OpenAI primary)
 app.post('/api/analyze-opportunity', async (req, res) => {
   const item = req.body || {};
+  const openaiKey = process.env.OPENAI_API_KEY?.trim();
   const apiKey = process.env.GEMINI_API_KEY?.trim();
 
-  if (!apiKey) {
-    return res.status(400).json({ error: 'GEMINI_API_KEY가 서버에 설정되어 있지 않습니다.' });
+  if (!openaiKey && !apiKey) {
+    return res.status(400).json({ error: 'OPENAI_API_KEY 또는 GEMINI_API_KEY가 서버에 설정되어 있지 않습니다.' });
   }
 
   const centralListStr = item.centralTourSpots && item.centralTourSpots.length > 0
@@ -752,19 +752,15 @@ app.post('/api/analyze-opportunity', async (req, res) => {
 `;
 
   try {
-    const ai = new GoogleGenAI({ apiKey });
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
-      contents: prompt,
+    const { data: parsed, provider } = await llmGenerateJson({
+      user: prompt,
+      openaiKey,
+      geminiKey: apiKey,
+      temperature: 0.5,
     });
-
-    const rawText = response.text || '';
-    const cleanedText = rawText.replace(/```(?:json)?/gi, '').replace(/```/g, '').trim();
-    const parsed = JSON.parse(cleanedText);
-
-    return res.json({ success: true, data: parsed });
+    return res.json({ success: true, data: parsed, generatedBy: provider });
   } catch (err) {
-    const errorMsg = err instanceof Error ? err.message : 'Gemini API 호출 중 에러가 발생했습니다.';
+    const errorMsg = err instanceof Error ? err.message : 'AI 분석 호출 중 에러가 발생했습니다.';
     return res.status(500).json({ error: errorMsg });
   }
 });

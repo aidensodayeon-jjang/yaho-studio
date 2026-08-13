@@ -1,5 +1,12 @@
 import { useState, useEffect } from 'react';
-import { fetchTourSpots, TourSpotItem } from '../api/tourApi';
+import { fetchTourSpots, fetchTourSpotsByEntities, TourSpotItem } from '../api/tourApi';
+
+export interface TrendEntities {
+  places?: string[];
+  regions?: string[];
+  events?: string[];
+  foods?: string[];
+}
 
 export interface UseTourDataResult {
   loading: boolean;
@@ -8,15 +15,32 @@ export interface UseTourDataResult {
   isNationwideFallback: boolean;
 }
 
+/**
+ * When `entities` is provided (a trend was selected), POIs are resolved from the
+ * trend's structured entities (places → regions+places → events → foods → regions),
+ * NOT from the raw display title. This is what actually connects a discovered
+ * trend like "공주 공산성 야경" to the real POI "공산성". Falls back to the plain
+ * areaCode/keyword search for manual searches.
+ */
 export function useTourData(
   areaCode?: number,
   contentTypeId?: number,
-  keyword?: string
+  keyword?: string,
+  entities?: TrendEntities
 ): UseTourDataResult {
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [data, setData] = useState<TourSpotItem[]>([]);
   const [isNationwideFallback, setIsNationwideFallback] = useState<boolean>(false);
+
+  const hasEntities = !!(
+    entities &&
+    ((entities.places && entities.places.length > 0) ||
+      (entities.regions && entities.regions.length > 0) ||
+      (entities.events && entities.events.length > 0) ||
+      (entities.foods && entities.foods.length > 0))
+  );
+  const entitiesKey = hasEntities ? JSON.stringify(entities) : '';
 
   useEffect(() => {
     let isMounted = true;
@@ -25,7 +49,9 @@ export function useTourData(
       setLoading(true);
       setError(null);
       try {
-        const result = await fetchTourSpots(areaCode, contentTypeId, keyword);
+        const result = hasEntities
+          ? await fetchTourSpotsByEntities(entities, keyword)
+          : await fetchTourSpots(areaCode, contentTypeId, keyword);
         if (isMounted) {
           setData(result.spots);
           setIsNationwideFallback(result.isNationwideFallback);
@@ -47,7 +73,8 @@ export function useTourData(
     return () => {
       isMounted = false;
     };
-  }, [areaCode, contentTypeId, keyword]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [areaCode, contentTypeId, keyword, entitiesKey]);
 
   return { loading, error, data, isNationwideFallback };
 }
