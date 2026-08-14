@@ -51,7 +51,7 @@ export function useYouTubePopularTrends() {
     async function fetchPopularTrends() {
       setLoading(true);
       try {
-        const response = await fetch('/api/youtube-popular-trends');
+        const response = await fetch('/api/inbound-trends');
         if (!response.ok) {
           throw new Error(`HTTP error! status: ${response.status}`);
         }

@@ -79,7 +79,8 @@ export default function OpportunityDetail({ selectedEcho, areaCode = 1, onSelect
   const [detailedLoading, setDetailedLoading] = useState<boolean>(false);
 
   // ⑤ User-specified generation settings (target / budget / duration)
-  const [userTarget, setUserTarget] = useState<string>('');
+  // Default target = 외국인 관광객 (inbound-first, per product direction).
+  const [userTarget, setUserTarget] = useState<string>('외국인 관광객');
   const [userBudget, setUserBudget] = useState<string>('');
   const [userDuration, setUserDuration] = useState<string>('');
 

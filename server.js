@@ -3,6 +3,7 @@ import dotenv from 'dotenv';
 import { GoogleGenAI } from '@google/genai';
 import { discoverTrends, extractEntities } from './trend-discovery.js';
 import { saveSnapshot, computeRising, buildCharts } from './trend-snapshots.js';
+import { fetchInboundTrends } from './google-trends.js';
 import { llmGenerateJson } from './llm.js';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -146,7 +147,7 @@ app.get('/api/youtube-popular-trends', async (req, res) => {
     const fetchedItemsMap = new Map();
 
     for (const seed of shuffledSeeds) {
-      const searchUrl = `https://www.googleapis.com/youtube/v3/search?part=snippet&q=${encodeURIComponent(seed)}&type=video&publishedAfter=${publishedAfter}&regionCode=KR&order=date&maxResults=15&key=${ytKey}`;
+      const searchUrl = `https://www.googleapis.com/youtube/v3/search?part=snippet&q=${encodeURIComponent(seed)}&type=video&publishedAfter=${publishedAfter}&regionCode=KR&order=date&maxResults=50&key=${ytKey}`;
       try {
         const sRes = await fetch(searchUrl);
         if (sRes.ok) {
@@ -166,10 +167,26 @@ app.get('/api/youtube-popular-trends', async (req, res) => {
       return res.json({ version: 'trend-discovery-v2', success: true, source: 'live', data: [] });
     }
 
-    const videosUrl = `https://www.googleapis.com/youtube/v3/videos?part=snippet,statistics&id=${uniqueVideoIds.slice(0, 50).join(',')}&key=${ytKey}`;
-    const vRes = await fetch(videosUrl);
-    const vJson = await vRes.json();
-    const videoDetails = vJson.items || [];
+    // videos.list = 1 unit/call (≤50 ids), so fetch stats for ALL unique videos
+    // in chunks. Denser sample → the same specific venue actually recurs across
+    // multiple videos, which is what makes a real (corroborated) trend.
+    const idChunks = [];
+    for (let i = 0; i < Math.min(uniqueVideoIds.length, 250); i += 50) {
+      idChunks.push(uniqueVideoIds.slice(i, i + 50));
+    }
+    const videoDetails = [];
+    for (const chunk of idChunks) {
+      const videosUrl = `https://www.googleapis.com/youtube/v3/videos?part=snippet,statistics&id=${chunk.join(',')}&key=${ytKey}`;
+      try {
+        const vRes = await fetch(videosUrl);
+        if (vRes.ok) {
+          const vJson = await vRes.json();
+          videoDetails.push(...(vJson.items || []));
+        }
+      } catch (err) {
+        console.log('videos.list chunk error:', err instanceof Error ? err.message : err);
+      }
+    }
 
     const parsedViralVideos = videoDetails.map((v) => {
       const stats = v.statistics || {};
@@ -268,6 +285,28 @@ app.get('/api/youtube-popular-trends', async (req, res) => {
   } catch (err) {
     const errorMsg = err instanceof Error ? err.message : 'Tourism Social Discovery V2 실패';
     return res.status(500).json({ version: 'trend-discovery-v2', success: false, error: errorMsg, data: [] });
+  }
+});
+
+// GET /api/inbound-trends — foreign-tourist trend chart from Google Trends
+// (curated Korea attraction universe ranked by real global search interest).
+app.get('/api/inbound-trends', async (req, res) => {
+  try {
+    const { popular, rising, source, builtAt } = await fetchInboundTrends(Date.now());
+    return res.json({
+      version: 'inbound-trends-v1',
+      success: true,
+      source,
+      builtAt,
+      hasBaseline: true, // rising is real growth from Google Trends
+      audience: 'inbound',
+      popular,
+      rising,
+      data: popular, // back-compat
+    });
+  } catch (err) {
+    const errorMsg = err instanceof Error ? err.message : '외국인 트렌드 수집 실패';
+    return res.status(500).json({ version: 'inbound-trends-v1', success: false, error: errorMsg, popular: [], rising: [], data: [] });
   }
 });
 
@@ -831,4 +870,8 @@ if (process.env.NODE_ENV === 'production') {
 
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`Server is running on http://0.0.0.0:${PORT}`);
+  // Pre-warm the inbound (Google Trends) chart so the first request is instant.
+  fetchInboundTrends(Date.now())
+    .then((r) => console.log(`[Inbound Trends] pre-warmed: source=${r.source}, popular=${r.popular.length}`))
+    .catch((e) => console.log('[Inbound Trends] pre-warm failed:', e?.message || e));
 });

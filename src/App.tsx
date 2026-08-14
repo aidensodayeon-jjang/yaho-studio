@@ -146,10 +146,10 @@ export default function App() {
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-neutral-200/80 pb-2.5">
             <div className="flex items-center space-x-2">
               <Sparkles className="w-4 h-4 text-amber-500" />
-              <h2 className="text-sm font-black text-neutral-900 tracking-tight">실시간 관광 트렌드 차트</h2>
+              <h2 className="text-sm font-black text-neutral-900 tracking-tight">외국인 관광 트렌드 차트</h2>
             </div>
             <span className="text-[10px] text-neutral-400 font-medium">
-              YouTube 소셜 바이럴 기반 · 6시간마다 갱신
+              🌏 Google Trends 해외 검색 관심도 · 매일 갱신
             </span>
           </div>
 
@@ -165,7 +165,7 @@ export default function App() {
               <div className="bg-white rounded-2xl border border-neutral-200 p-3 space-y-1">
                 <div className="flex items-center justify-between px-1.5 pb-1.5 mb-0.5 border-b border-neutral-100">
                   <span className="text-xs font-black text-neutral-900">🔥 인기 트렌드 TOP 10</span>
-                  <span className="text-[9px] text-neutral-400 font-medium">트렌드 지수순</span>
+                  <span className="text-[9px] text-neutral-400 font-medium">해외 검색 관심도순</span>
                 </div>
                 {popularTrends.map((t, idx) => {
                   const isSelected = selectedKeyword === t.title;
@@ -195,7 +195,7 @@ export default function App() {
               <div className="bg-white rounded-2xl border border-neutral-200 p-3 space-y-1">
                 <div className="flex items-center justify-between px-1.5 pb-1.5 mb-0.5 border-b border-neutral-100">
                   <span className="text-xs font-black text-neutral-900">📈 급상승 트렌드</span>
-                  <span className="text-[9px] text-neutral-400 font-medium">{trendHasBaseline ? '24h 상승률순' : '시청 속도순'}</span>
+                  <span className="text-[9px] text-neutral-400 font-medium">검색 상승률순</span>
                 </div>
                 {risingTrends.map((t, idx) => {
                   const isSelected = selectedKeyword === t.title;
