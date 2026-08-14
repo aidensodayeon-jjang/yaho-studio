@@ -120,9 +120,23 @@ app.get('/api/youtube-popular-trends', async (req, res) => {
     });
   }
 
-  // Hot-place-discovery seeds: bias toward content that names specific viral
-  // venues (cafes, pools, pensions, pop-ups) rather than generic travel vlogs.
-  const seeds = ['핫플', '핫플레이스', '감성카페', '신상카페', '요즘핫한', '오픈런', '대형카페', '감성숙소', '수영장펜션', '전시회', '팝업', '촬영지'];
+  // ================= SEED STRATEGY (hybrid A + B) =================
+  // Quota note: YouTube search.list = 100 units; daily cap 10,000 (~100 searches).
+  // With the 6h chart cache this runs ~4×/day, so keep total seeds ≲ 20.
+  //
+  // B. WATCHLIST — specific SNS-viral venue names searched directly, so hot
+  //    spots like 리센느 / 왕사남 are caught even when generic seeds miss them.
+  //    ⇩ Curate this list: add spots as they blow up, remove stale ones.
+  const HOT_SPOT_WATCHLIST = ['리센느', '왕사남', '서피비치', '아르떼뮤지엄', '스페이스워크', '몽대'];
+  //
+  // A. REGION × hotplace — region-anchored queries auto-surface each region's
+  //    trending venues (리센느 shows up under "경주 카페"/"거제 카페").
+  const REGION_HOTPLACE_SEEDS = ['경주 카페', '거제 카페', '강릉 카페', '양양 서핑', '제주 핫플', '부산 핫플', '속초 핫플', '전주 핫플'];
+  //
+  // General SNS hotplace discovery.
+  const GENERAL_SEEDS = ['핫플', '감성카페', '신상카페', '오픈런'];
+  //
+  const seeds = [...HOT_SPOT_WATCHLIST, ...REGION_HOTPLACE_SEEDS, ...GENERAL_SEEDS];
 
   try {
     const publishedAfter = new Date(now - 7 * 24 * 60 * 60 * 1000).toISOString();
