@@ -120,7 +120,9 @@ app.get('/api/youtube-popular-trends', async (req, res) => {
     });
   }
 
-  const seeds = ['여행', '국내여행', '핫플', '맛집', '축제', '팝업', '촬영지', '여행 브이로그', '성지순례', 'K-POP 촬영지', '데이트'];
+  // Hot-place-discovery seeds: bias toward content that names specific viral
+  // venues (cafes, pools, pensions, pop-ups) rather than generic travel vlogs.
+  const seeds = ['핫플', '핫플레이스', '감성카페', '신상카페', '요즘핫한', '오픈런', '대형카페', '감성숙소', '수영장펜션', '전시회', '팝업', '촬영지'];
 
   try {
     const publishedAfter = new Date(now - 7 * 24 * 60 * 60 * 1000).toISOString();
@@ -170,10 +172,11 @@ app.get('/api/youtube-popular-trends', async (req, res) => {
       return {
         videoId: v.id,
         title: snippet.title || '',
-        description: (snippet.description || '').slice(0, 150),
+        description: (snippet.description || '').slice(0, 220),
         channelTitle: snippet.channelTitle || '',
         publishedAt: snippet.publishedAt || '',
-        tags: (snippet.tags || []).slice(0, 5),
+        tags: (snippet.tags || []).slice(0, 12), // hashtags often carry the viral venue name
+        categoryId: snippet.categoryId || '',
         viewCount,
         likeCount: Number(stats.likeCount || 0),
         commentCount: Number(stats.commentCount || 0),

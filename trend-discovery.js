@@ -164,7 +164,7 @@ export function verifyEvidence(anchors, sourceVideos) {
     .filter((a) => a.length >= 2);
   if (clean.length === 0) return [];
   return sourceVideos.filter((v) => {
-    const hay = `${v.title} ${v.description}`.toLowerCase();
+    const hay = `${v.title} ${v.description} ${(v.tags || []).join(' ')}`.toLowerCase();
     return clean.some((a) => hay.includes(a));
   });
 }
@@ -255,43 +255,55 @@ function reasonFor(title) {
 export async function clusterWithOpenAI({ openaiKey, videos, model = 'gpt-4o-mini' }) {
   const client = new OpenAI({ apiKey: openaiKey });
 
+  // Strip lone surrogates (from slicing emoji mid-pair) and control chars —
+  // otherwise the OpenAI request body is rejected as invalid JSON (400).
+  const clean = (str) =>
+    (str || '')
+      .replace(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])/g, '')
+      .replace(/(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g, '')
+      .replace(/[\u0000-\u001F\u007F]/g, ' ')
+      .trim();
+
   const list = videos
-    .map(
-      (v, i) =>
-        `[${i}] 제목:${v.title} | 채널:${v.channelTitle} | 조회:${v.viewCount} | 시청속도:${v.viewsPerHour}/h`
-    )
+    .map((v, i) => {
+      const tags = (v.tags || []).map(clean).join(', ');
+      return `[${i}] 제목:${clean(v.title)}\n    설명:${clean(v.description).slice(0, 140)}\n    태그:${tags}\n    (채널:${clean(v.channelTitle)} | 조회:${v.viewCount} | 시청속도:${v.viewsPerHour}/h)`;
+    })
     .join('\n');
 
   const system =
-    '당신은 대한민국 국내 관광 트렌드 분석가입니다. 여러 YouTube 영상에서 ' +
-    '"실제 방문 가능한 국내 관광 현상"만 골라 교차 클러스터링합니다. ' +
-    '해외여행, 정치/시사, 순수 연예 가십, 광고성 영상은 제외합니다.';
+    '당신은 대한민국 국내 관광·핫플레이스 트렌드 분석가입니다. YouTube/Shorts 콘텐츠에서 ' +
+    '지금 SNS에서 화제가 되고 있는 "구체적인 실제 장소·업장(카페·수영장·펜션·전시·팝업·맛집 등의 상호명/브랜드명)"을 ' +
+    '지역과 묶어 포착합니다. 해외여행, 정치/시사, 연예 가십, 광고는 제외합니다.';
 
-  const user = `아래는 최근 국내에서 유입 속도가 높은 YouTube 영상 목록입니다.
+  const user = `아래는 최근 국내에서 유입 속도가 높은 YouTube/Shorts 콘텐츠입니다. (제목·설명·태그 포함)
 
 ${list}
 
 [작업]
-여러 영상에 공통으로 나타나는 "국내 관광 트렌드"를 클러스터로 묶어 추출하세요.
+지금 SNS에서 화제가 되는 "구체적인 장소/업장 고유명사"를 지역과 묶어 트렌드로 추출하세요.
+지향하는 형태 예시: "경주 리센느", "거제 리센트", "영월 왕사남", "양양 서피비치", "포항 스페이스워크".
 
 [엄격 규칙]
-1. trendTitle 은 반드시 구체적이어야 합니다: "지역+장소", "지역+행사/활동", "장소+활동" 형태.
-   단독 지역명("서울","부산") 또는 단독 generic 단어("축제","팝업","맛집","성지순례","데이트")는 절대 금지.
-2. sourceVideoIndexes 에는 이 트렌드를 실제로 뒷받침하는 영상 번호만 넣으세요.
-   그 영상 제목에 트렌드의 핵심 장소/지역/행사 단어가 실제로 등장해야 합니다. 억지 연결 금지.
-3. 관련 없는 영상을 억지로 트렌드로 만들지 마세요. 진짜 트렌드가 적으면 적게 반환하세요.
-4. anchor 는 트렌드의 핵심 실존 고유명사(장소/지역/행사)입니다. 검증에 사용됩니다.
-5. 오직 순수 JSON만 반환하세요.
+1. trendTitle = "지역 + 실제 상호/장소 고유명사" 형태.
+   - ✅ 좋음: 실제 카페·수영장·펜션·전시·팝업·맛집의 고유한 이름 (예: 리센느, 왕사남, 서피비치)
+   - ❌ 절대 금지: "OO 여행", "OO 맛집 코스", "OO 여행 추천", "OO 힐링" 같은 일반명사 조합. 단독 지역명도 금지.
+2. 고유명사는 반드시 영상 제목/설명/태그에 실제로 등장하는 단어여야 합니다. 지어내지 마세요.
+3. 해시태그(#영월왕사남 등)에서 상호명을 적극적으로 찾아내세요.
+4. 아직 대중적으로 유명하지 않아도, 최근 여러 콘텐츠에 반복 등장하는 신상 스팟을 우선하세요.
+5. 진짜 화제 스팟이 적으면 적게 반환하세요. 억지로 일반명사로 채우지 마세요.
+6. sourceVideoIndexes = 그 스팟이 실제 등장한 영상 번호만.
+7. anchor = 그 장소의 핵심 고유명사 한 단어(검증에 사용). 오직 순수 JSON.
 
 [JSON 형상]
 {
   "trends": [
     {
-      "trendTitle": "성수동 팝업스토어",
-      "summary": "성수동 일대 팝업스토어 방문 콘텐츠가 급증",
-      "anchor": "성수동",
-      "entities": { "regions": ["성수"], "places": ["성수동"], "events": ["팝업스토어"], "activities": [] },
-      "sourceVideoIndexes": [0, 3, 7]
+      "trendTitle": "경주 리센느",
+      "summary": "경주 신상 감성카페 '리센느' 방문 콘텐츠가 급증",
+      "anchor": "리센느",
+      "entities": { "regions": ["경주"], "places": ["리센느"], "events": [], "activities": ["카페투어"] },
+      "sourceVideoIndexes": [0, 3]
     }
   ]
 }`;
