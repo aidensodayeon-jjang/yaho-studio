@@ -120,23 +120,19 @@ app.get('/api/youtube-popular-trends', async (req, res) => {
     });
   }
 
-  // ================= SEED STRATEGY (hybrid A + B) =================
-  // Quota note: YouTube search.list = 100 units; daily cap 10,000 (~100 searches).
-  // With the 6h chart cache this runs ~4×/day, so keep total seeds ≲ 20.
+  // ================= SEED STRATEGY (automatic discovery) =================
+  // No curated venue list — that would just be us hand-picking trends. We only
+  // define the SEARCH SURFACE (stable tourism regions × broad hotplace terms);
+  // WHICH specific venue is trending is decided by the engine via velocity /
+  // cross-video frequency / snapshot growth. The specific names (헤이안카페,
+  // 부푼카페 …) emerge from the content + hashtags, not from a hardcoded list.
   //
-  // B. WATCHLIST — specific SNS-viral venue names searched directly, so hot
-  //    spots like 리센느 / 왕사남 are caught even when generic seeds miss them.
-  //    ⇩ Curate this list: add spots as they blow up, remove stale ones.
-  const HOT_SPOT_WATCHLIST = ['리센느', '왕사남', '서피비치', '아르떼뮤지엄', '스페이스워크', '몽대'];
-  //
-  // A. REGION × hotplace — region-anchored queries auto-surface each region's
-  //    trending venues (리센느 shows up under "경주 카페"/"거제 카페").
-  const REGION_HOTPLACE_SEEDS = ['경주 카페', '거제 카페', '강릉 카페', '양양 서핑', '제주 핫플', '부산 핫플', '속초 핫플', '전주 핫플'];
-  //
-  // General SNS hotplace discovery.
-  const GENERAL_SEEDS = ['핫플', '감성카페', '신상카페', '오픈런'];
-  //
-  const seeds = [...HOT_SPOT_WATCHLIST, ...REGION_HOTPLACE_SEEDS, ...GENERAL_SEEDS];
+  // Quota: search.list = 100 units, daily cap 10,000 (~100 searches). With the
+  // 6h chart cache this runs ~4×/day, so keep total seeds ≲ 20.
+  const REGIONS = ['경주', '강릉', '속초', '양양', '거제', '통영', '여수', '전주', '제주', '부산', '포항', '가평', '대구', '춘천'];
+  const REGION_SEEDS = REGIONS.map((r) => `${r} 핫플`); // "경주 핫플" → surfaces that region's trending venues
+  const GENERAL_SEEDS = ['감성카페', '신상카페', '오픈런', '요즘핫한 카페']; // nationwide hotplaces not tied to a region
+  const seeds = [...REGION_SEEDS, ...GENERAL_SEEDS];
 
   try {
     const publishedAfter = new Date(now - 7 * 24 * 60 * 60 * 1000).toISOString();
