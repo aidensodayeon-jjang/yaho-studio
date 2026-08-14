@@ -33,10 +33,16 @@ export interface YouTubePopularTrendItem {
   };
   poiName?: string | null;
   poiRegion?: string | null;
+  // Ranking-chart fields
+  rank?: number;
+  risingRate?: number | null;
+  isNew?: boolean;
 }
 
 export function useYouTubePopularTrends() {
-  const [trends, setTrends] = useState<YouTubePopularTrendItem[]>([]);
+  const [popular, setPopular] = useState<YouTubePopularTrendItem[]>([]);
+  const [rising, setRising] = useState<YouTubePopularTrendItem[]>([]);
+  const [hasBaseline, setHasBaseline] = useState<boolean>(false);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -50,19 +56,23 @@ export function useYouTubePopularTrends() {
           throw new Error(`HTTP error! status: ${response.status}`);
         }
         const json = await response.json();
-        if (isMounted) {
-          if (Array.isArray(json)) {
-            setTrends(json);
-          } else if (json.success && Array.isArray(json.data)) {
-            setTrends(json.data);
-          } else {
-            setTrends([]);
-          }
-        }
+        if (!isMounted) return;
+
+        // New chart shape: { popular, rising }. Fall back to the old flat
+        // array / { data } shape for safety.
+        const pop = Array.isArray(json.popular)
+          ? json.popular
+          : Array.isArray(json) ? json
+          : Array.isArray(json.data) ? json.data
+          : [];
+        setPopular(pop);
+        setRising(Array.isArray(json.rising) ? json.rising : pop);
+        setHasBaseline(Boolean(json.hasBaseline));
       } catch (err) {
         if (isMounted) {
           setError(err instanceof Error ? err.message : 'YouTube 자동 발견 트렌드 수집 실패');
-          setTrends([]);
+          setPopular([]);
+          setRising([]);
         }
       } finally {
         if (isMounted) setLoading(false);
@@ -73,5 +83,6 @@ export function useYouTubePopularTrends() {
     return () => { isMounted = false; };
   }, []);
 
-  return { trends, loading, error };
+  // `trends` kept as an alias of `popular` for backward compatibility.
+  return { popular, rising, hasBaseline, trends: popular, loading, error };
 }

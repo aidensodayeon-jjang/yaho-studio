@@ -17,7 +17,7 @@ export default function App() {
   // TourAPI POI lookup instead of the raw title. null for manual searches.
   const [selectedTrend, setSelectedTrend] = useState<YouTubePopularTrendItem | null>(null);
 
-  const { trends: autoDiscoveredTrends, loading: popularYtLoading, error: popularYtError } = useYouTubePopularTrends();
+  const { popular: popularTrends, rising: risingTrends, hasBaseline: trendHasBaseline, trends: autoDiscoveredTrends, loading: popularYtLoading, error: popularYtError } = useYouTubePopularTrends();
   const { data: tourData, loading: tourLoading, error: tourError, isNationwideFallback } = useTourData(
     areaCode || 1,
     12,
@@ -141,69 +141,91 @@ export default function App() {
           </div>
         </section>
 
-        {/* 1. YouTube Social Discovery Pool Trend Section */}
+        {/* 1. Realtime Trend Chart (인기 TOP 10 + 급상승) */}
         <section className="space-y-3">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-neutral-200/80 pb-2.5">
             <div className="flex items-center space-x-2">
               <Sparkles className="w-4 h-4 text-amber-500" />
-              <h2 className="text-sm font-black text-neutral-900 tracking-tight">
-                지금 포착된 관광 트렌드 {autoDiscoveredTrends.length > 0 ? autoDiscoveredTrends.length : ''}
-              </h2>
+              <h2 className="text-sm font-black text-neutral-900 tracking-tight">실시간 관광 트렌드 차트</h2>
             </div>
-
             <span className="text-[10px] text-neutral-400 font-medium">
-              YouTube 소셜 바이럴 신호 · NAVER 검색 관심도 검증
+              YouTube 소셜 바이럴 기반 · 6시간마다 갱신
             </span>
           </div>
 
           {popularYtLoading ? (
             <LoadingSkeleton type="trend-list" />
-          ) : autoDiscoveredTrends.length === 0 ? (
+          ) : popularTrends.length === 0 ? (
             <div className="bg-white rounded-2xl p-6 border border-neutral-200 text-center text-xs text-neutral-500">
               YouTube 트렌드 데이터를 불러오지 못했습니다.
             </div>
           ) : (
-            <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5">
-              {autoDiscoveredTrends.map((t, idx) => {
-                const isSelected = selectedKeyword === t.title;
-                const rankNum = String(idx + 1).padStart(2, '0');
-                return (
-                  <div
-                    key={t.title}
-                    onClick={() => handleSelectTrend(t)}
-                    className={`bg-white rounded-2xl border p-3 cursor-pointer transition-all flex flex-col justify-between space-y-2 ${
-                      isSelected
-                        ? 'border-neutral-900 ring-2 ring-neutral-900 bg-neutral-50/40 shadow-sm'
-                        : 'border-neutral-200 hover:border-neutral-400'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between">
-                      <span className="text-[10px] font-mono font-extrabold text-neutral-400">{rankNum}</span>
-                      <span className="text-[8.5px] font-bold text-red-600 bg-red-50 px-1.5 py-0.5 rounded border border-red-100">
-                        YT DISCOVERY
-                      </span>
-                    </div>
-
-                    <div>
-                      <h3 className="text-xs font-black text-neutral-900 truncate mb-1">{t.title}</h3>
-                      <div className="space-y-0.5">
-                        <div className="flex items-center justify-between text-[9.5px]">
-                          <span className="text-neutral-400">YouTube</span>
-                          <span className="font-bold text-red-500">VIRAL {t.youtubeSignal?.viralLevel ?? '—'}</span>
-                        </div>
-                        <div className="flex items-center justify-between text-[9.5px]">
-                          <span className="text-neutral-400">NAVER</span>
-                          {t.naverSignal?.changeRate != null ? (
-                            <span className="font-extrabold text-green-600">↑ {t.naverSignal.changeRate}%</span>
-                          ) : (
-                            <span className="text-[8.5px] font-medium text-neutral-400">검증 데이터 없음</span>
-                          )}
-                        </div>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+              {/* 인기 트렌드 TOP 10 */}
+              <div className="bg-white rounded-2xl border border-neutral-200 p-3 space-y-1">
+                <div className="flex items-center justify-between px-1.5 pb-1.5 mb-0.5 border-b border-neutral-100">
+                  <span className="text-xs font-black text-neutral-900">🔥 인기 트렌드 TOP 10</span>
+                  <span className="text-[9px] text-neutral-400 font-medium">트렌드 지수순</span>
+                </div>
+                {popularTrends.map((t, idx) => {
+                  const isSelected = selectedKeyword === t.title;
+                  const rank = t.rank ?? idx + 1;
+                  return (
+                    <div
+                      key={`pop-${t.title}`}
+                      onClick={() => handleSelectTrend(t)}
+                      className={`flex items-center gap-2.5 px-2 py-1.5 rounded-xl cursor-pointer transition-all ${
+                        isSelected ? 'bg-neutral-900/5 ring-1 ring-neutral-900' : 'hover:bg-neutral-100'
+                      }`}
+                    >
+                      <span className={`w-5 text-center text-sm font-black tabular-nums ${rank <= 3 ? 'text-red-500' : 'text-neutral-300'}`}>{rank}</span>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-xs font-bold text-neutral-900 truncate">{t.title}</p>
+                        <p className="text-[9px] text-neutral-400 truncate">
+                          {t.poiRegion || t.entities?.regions?.[0] || '국내'} · VIRAL {t.youtubeSignal?.viralLevel ?? '—'}
+                        </p>
                       </div>
+                      <span className="text-[11px] font-black text-neutral-700 tabular-nums shrink-0">{t.trendScore}</span>
                     </div>
-                  </div>
-                );
-              })}
+                  );
+                })}
+              </div>
+
+              {/* 급상승 트렌드 */}
+              <div className="bg-white rounded-2xl border border-neutral-200 p-3 space-y-1">
+                <div className="flex items-center justify-between px-1.5 pb-1.5 mb-0.5 border-b border-neutral-100">
+                  <span className="text-xs font-black text-neutral-900">📈 급상승 트렌드</span>
+                  <span className="text-[9px] text-neutral-400 font-medium">{trendHasBaseline ? '24h 상승률순' : '시청 속도순'}</span>
+                </div>
+                {risingTrends.map((t, idx) => {
+                  const isSelected = selectedKeyword === t.title;
+                  const rank = t.rank ?? idx + 1;
+                  return (
+                    <div
+                      key={`rise-${t.title}`}
+                      onClick={() => handleSelectTrend(t)}
+                      className={`flex items-center gap-2.5 px-2 py-1.5 rounded-xl cursor-pointer transition-all ${
+                        isSelected ? 'bg-neutral-900/5 ring-1 ring-neutral-900' : 'hover:bg-neutral-100'
+                      }`}
+                    >
+                      <span className={`w-5 text-center text-sm font-black tabular-nums ${rank <= 3 ? 'text-emerald-500' : 'text-neutral-300'}`}>{rank}</span>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-xs font-bold text-neutral-900 truncate">{t.title}</p>
+                        <p className="text-[9px] text-neutral-400 truncate">
+                          {t.poiRegion || t.entities?.regions?.[0] || '국내'} · VIRAL {t.youtubeSignal?.viralLevel ?? '—'}
+                        </p>
+                      </div>
+                      {t.isNew ? (
+                        <span className="text-[9px] font-black text-white bg-emerald-500 px-1.5 py-0.5 rounded shrink-0">NEW</span>
+                      ) : t.risingRate != null ? (
+                        <span className="text-[11px] font-black text-emerald-600 tabular-nums shrink-0">↑{t.risingRate}%</span>
+                      ) : (
+                        <span className="text-[10px] font-bold text-neutral-500 tabular-nums shrink-0">{(t.youtubeSignal?.viewVelocity ?? 0).toLocaleString()}/h</span>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           )}
         </section>

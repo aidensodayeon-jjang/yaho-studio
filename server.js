@@ -2,6 +2,7 @@ import express from 'express';
 import dotenv from 'dotenv';
 import { GoogleGenAI } from '@google/genai';
 import { discoverTrends, extractEntities } from './trend-discovery.js';
+import { saveSnapshot, computeRising, buildCharts } from './trend-snapshots.js';
 import { llmGenerateJson } from './llm.js';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -21,22 +22,23 @@ const PORT = process.env.PORT || 3001;
 const youtubeCache = new Map();
 const YOUTUBE_CACHE_TTL = 30 * 60 * 1000; // 30 mins
 
-let popularTrendsCache = null;
+let popularTrendsCache = null; // { popular, rising, data, hasBaseline }
 let popularTrendsCacheTime = 0;
-const POPULAR_TRENDS_TTL = 60 * 60 * 1000; // 1 hour
+// Snapshot the chart every 6h so it reads like a stable ranking chart that
+// refreshes a few times a day — not a fresh random draw on every reload.
+const POPULAR_TRENDS_TTL = 6 * 60 * 60 * 1000; // 6 hours
 
-// V2 Cache Validation
-function isValidV2Cache(data) {
+// V2 Cache Validation — the cached chart object with populated lists.
+function isValidV2Cache(cache) {
   return (
-    Array.isArray(data) &&
-    data.length > 0 &&
-    data.every(
+    cache &&
+    Array.isArray(cache.popular) &&
+    cache.popular.length > 0 &&
+    cache.popular.every(
       (item) =>
         typeof item.title === 'string' &&
         typeof item.trendScore === 'number' &&
-        item.youtubeSignal &&
-        item.naverSignal &&
-        item.tourism
+        item.youtubeSignal
     )
   );
 }
@@ -96,12 +98,15 @@ app.get('/api/youtube-popular-trends', async (req, res) => {
 
   const now = Date.now();
   if (popularTrendsCache && isValidV2Cache(popularTrendsCache) && now - popularTrendsCacheTime < POPULAR_TRENDS_TTL) {
-    console.log('[Cache] Returning cached V2 popular trends:', popularTrendsCache.length);
+    console.log('[Cache] Returning cached V2 chart:', popularTrendsCache.popular.length, 'popular /', popularTrendsCache.rising.length, 'rising');
     return res.json({
       version: 'trend-discovery-v2',
       success: true,
       source: 'cache-v2',
-      data: popularTrendsCache,
+      hasBaseline: popularTrendsCache.hasBaseline,
+      popular: popularTrendsCache.popular,
+      rising: popularTrendsCache.rising,
+      data: popularTrendsCache.popular, // backward-compat
     });
   }
 
@@ -119,7 +124,10 @@ app.get('/api/youtube-popular-trends', async (req, res) => {
 
   try {
     const publishedAfter = new Date(now - 7 * 24 * 60 * 60 * 1000).toISOString();
-    const shuffledSeeds = seeds.sort(() => 0.5 - Math.random()).slice(0, 7);
+    // Deterministic: use ALL seeds every run (no random shuffle). This is the
+    // core fix for the "즉흥적" feeling — the input set no longer changes each
+    // load, so the ranking chart stays stable and comparable across snapshots.
+    const shuffledSeeds = seeds;
     trendDiscoveryDebug.seedsUsed = shuffledSeeds;
 
     console.log('\n=================== [1] SEED SEARCH ===================');
@@ -221,9 +229,17 @@ app.get('/api/youtube-popular-trends', async (req, res) => {
 
     trendDiscoveryDebug.validClustersCount = finalTrendList.length;
 
+    // ---- Ranking chart: real growth vs ~24h baseline (velocity fallback on cold start) ----
+    saveSnapshot(finalTrendList, now); // persist this run for future comparisons (throttled)
+    const { hasBaseline, trends: trendsWithRising } = computeRising(finalTrendList, now);
+    const { popular, rising } = buildCharts(trendsWithRising, hasBaseline, 10);
+    trendDiscoveryDebug.hasBaseline = hasBaseline;
+
+    const chart = { popular, rising, data: popular, hasBaseline };
+
     // Only cache a non-empty, schema-valid result (avoid caching an empty run).
-    if (isValidV2Cache(finalTrendList)) {
-      popularTrendsCache = finalTrendList;
+    if (isValidV2Cache(chart)) {
+      popularTrendsCache = chart;
       popularTrendsCacheTime = now;
     }
 
@@ -231,7 +247,10 @@ app.get('/api/youtube-popular-trends', async (req, res) => {
       version: 'trend-discovery-v2',
       success: true,
       source: extractionSource === 'openai' ? 'openai' : 'fallback-deterministic-v2',
-      data: finalTrendList,
+      hasBaseline,
+      popular,
+      rising,
+      data: popular, // backward-compat
     });
   } catch (err) {
     const errorMsg = err instanceof Error ? err.message : 'Tourism Social Discovery V2 실패';
