@@ -5,6 +5,7 @@ import { discoverTrends, extractEntities } from './trend-discovery.js';
 import { saveSnapshot, computeRising, buildCharts } from './trend-snapshots.js';
 import { fetchInboundTrends } from './google-trends.js';
 import { fetchForeignKoreaThemes } from './youtube-rss.js';
+import { fetchWebTrends } from './web-trends.js';
 import { llmGenerateJson } from './llm.js';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -308,6 +309,29 @@ app.get('/api/inbound-trends', async (req, res) => {
   } catch (err) {
     const errorMsg = err instanceof Error ? err.message : '외국인 트렌드 수집 실패';
     return res.status(500).json({ version: 'inbound-trends-v1', success: false, error: errorMsg, popular: [], rising: [], data: [] });
+  }
+});
+
+// GET /api/web-trends — foreign-tourist Korea trend keywords discovered via
+// OpenAI web search (부산병 / 케어케이션 / 1인 세신 …), classified 인기/급상승.
+app.get('/api/web-trends', async (req, res) => {
+  try {
+    const openaiKey = process.env.OPENAI_API_KEY?.trim();
+    const { popular, rising, source, builtAt } = await fetchWebTrends({ openaiKey, now: Date.now() });
+    return res.json({
+      version: 'web-trends-v1',
+      success: true,
+      source,
+      builtAt,
+      hasBaseline: false,
+      audience: 'inbound-web',
+      popular,
+      rising,
+      data: popular,
+    });
+  } catch (err) {
+    const errorMsg = err instanceof Error ? err.message : '웹 트렌드 수집 실패';
+    return res.status(500).json({ version: 'web-trends-v1', success: false, error: errorMsg, popular: [], rising: [], data: [] });
   }
 });
 
@@ -895,8 +919,14 @@ if (process.env.NODE_ENV === 'production') {
 
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`Server is running on http://0.0.0.0:${PORT}`);
-  // Pre-warm the inbound (Google Trends) chart so the first request is instant.
+  // Pre-warm the trend boards so the first request is instant.
   fetchInboundTrends(Date.now())
     .then((r) => console.log(`[Inbound Trends] pre-warmed: source=${r.source}, popular=${r.popular.length}`))
     .catch((e) => console.log('[Inbound Trends] pre-warm failed:', e?.message || e));
+  const _oaiKey = process.env.OPENAI_API_KEY?.trim();
+  if (_oaiKey) {
+    fetchWebTrends({ openaiKey: _oaiKey })
+      .then((r) => console.log(`[Web Trends] pre-warmed: source=${r.source}, popular=${r.popular.length}`))
+      .catch((e) => console.log('[Web Trends] pre-warm failed:', e?.message || e));
+  }
 });

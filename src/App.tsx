@@ -17,12 +17,13 @@ export default function App() {
   // TourAPI POI lookup instead of the raw title. null for manual searches.
   const [selectedTrend, setSelectedTrend] = useState<YouTubePopularTrendItem | null>(null);
 
-  // Two trend boards: 🔍 search interest (Google Trends) and 🎥 foreign SNS
-  // (YouTube RSS theme clusters). A toggle switches which drives the chart.
-  const [trendMode, setTrendMode] = useState<'search' | 'sns'>('search');
+  // Three trend boards: 🔎 web keywords (OpenAI web search — 부산병/케어케이션),
+  // 🔍 search interest (Google Trends), 🎥 foreign SNS (YouTube RSS themes).
+  const [trendMode, setTrendMode] = useState<'web' | 'search' | 'sns'>('web');
+  const webChart = useYouTubePopularTrends('/api/web-trends');
   const searchChart = useYouTubePopularTrends('/api/inbound-trends');
   const snsChart = useYouTubePopularTrends('/api/foreign-korea-trends');
-  const activeChart = trendMode === 'search' ? searchChart : snsChart;
+  const activeChart = trendMode === 'web' ? webChart : trendMode === 'search' ? searchChart : snsChart;
   const popularTrends = activeChart.popular;
   const risingTrends = activeChart.rising;
   const trendHasBaseline = activeChart.hasBaseline;
@@ -162,20 +163,26 @@ export default function App() {
             <div className="flex items-center gap-2">
               <div className="inline-flex bg-neutral-100 p-0.5 rounded-lg">
                 <button
+                  onClick={() => setTrendMode('web')}
+                  className={`px-2.5 py-1 text-[10px] font-bold rounded-md transition-all ${trendMode === 'web' ? 'bg-white text-neutral-900 shadow-sm' : 'text-neutral-500 hover:text-neutral-900'}`}
+                >
+                  🔎 웹 트렌드
+                </button>
+                <button
                   onClick={() => setTrendMode('search')}
                   className={`px-2.5 py-1 text-[10px] font-bold rounded-md transition-all ${trendMode === 'search' ? 'bg-white text-neutral-900 shadow-sm' : 'text-neutral-500 hover:text-neutral-900'}`}
                 >
-                  🔍 검색 트렌드
+                  🔍 검색
                 </button>
                 <button
                   onClick={() => setTrendMode('sns')}
                   className={`px-2.5 py-1 text-[10px] font-bold rounded-md transition-all ${trendMode === 'sns' ? 'bg-white text-neutral-900 shadow-sm' : 'text-neutral-500 hover:text-neutral-900'}`}
                 >
-                  🎥 외국인 SNS 트렌드
+                  🎥 SNS
                 </button>
               </div>
               <span className="hidden sm:inline text-[10px] text-neutral-400 font-medium">
-                {trendMode === 'search' ? '🌏 Google Trends 검색 관심도' : '🎥 YouTube 조회속도'}
+                {trendMode === 'web' ? '🔎 웹검색 실화제 키워드' : trendMode === 'search' ? '🌏 Google Trends 검색량' : '🎥 YouTube 조회속도'}
               </span>
             </div>
           </div>
@@ -192,7 +199,7 @@ export default function App() {
               <div className="bg-white rounded-2xl border border-neutral-200 p-3 space-y-1">
                 <div className="flex items-center justify-between px-1.5 pb-1.5 mb-0.5 border-b border-neutral-100">
                   <span className="text-xs font-black text-neutral-900">🔥 인기 트렌드 TOP 10</span>
-                  <span className="text-[9px] text-neutral-400 font-medium">{trendMode === 'search' ? '해외 검색 관심도순' : '조회속도순'}</span>
+                  <span className="text-[9px] text-neutral-400 font-medium">{trendMode === 'web' ? '화제도순' : trendMode === 'search' ? '해외 검색 관심도순' : '조회속도순'}</span>
                 </div>
                 {popularTrends.map((t, idx) => {
                   const isSelected = selectedKeyword === t.title;
@@ -222,7 +229,7 @@ export default function App() {
               <div className="bg-white rounded-2xl border border-neutral-200 p-3 space-y-1">
                 <div className="flex items-center justify-between px-1.5 pb-1.5 mb-0.5 border-b border-neutral-100">
                   <span className="text-xs font-black text-neutral-900">📈 급상승 트렌드</span>
-                  <span className="text-[9px] text-neutral-400 font-medium">{trendMode === 'search' ? '검색 상승률순' : '신규 업로드'}</span>
+                  <span className="text-[9px] text-neutral-400 font-medium">{trendMode === 'web' ? '신조어·급상승' : trendMode === 'search' ? '검색 상승률순' : '신규 업로드'}</span>
                 </div>
                 {risingTrends.map((t, idx) => {
                   const isSelected = selectedKeyword === t.title;
