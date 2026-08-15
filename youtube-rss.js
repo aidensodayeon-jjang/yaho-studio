@@ -183,6 +183,9 @@ function themeItem(theme, vids, rank) {
     tourism: { score: Math.min(100, Math.round(totalVph / 60) + 10), reason: theme.productHint || '인바운드 상품화 가능 테마' },
     poiName: (theme.places && theme.places[0]) || null,
     poiRegion: (theme.regions && theme.regions[0]) || null,
+    category: '외국인 SNS',
+    productHint: theme.productHint || '',
+    kind: 'keyword', // theme → keyword studio flow
     exampleVideoUrl: rep ? `https://www.youtube.com/watch?v=${rep.videoId}` : null,
     risingRate: null,
     isNew: hasFresh,

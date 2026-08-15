@@ -312,6 +312,47 @@ app.get('/api/inbound-trends', async (req, res) => {
   }
 });
 
+// POST /api/keyword-studio — for a web-trend KEYWORD (부산병 등): a short AI
+// brief (뭔지/왜 뜨는지/상품 방향) + inbound product ideas. Not POI-based.
+app.post('/api/keyword-studio', async (req, res) => {
+  const { keyword, summary, category, productHint } = req.body || {};
+  const openaiKey = process.env.OPENAI_API_KEY?.trim();
+  const geminiKey = process.env.GEMINI_API_KEY?.trim();
+  if (!keyword) return res.status(400).json({ error: 'keyword가 필요합니다.' });
+  if (!openaiKey && !geminiKey) return res.status(400).json({ error: 'OPENAI_API_KEY 또는 GEMINI_API_KEY 필요' });
+
+  const prompt = `당신은 인바운드(외국인) 관광상품 기획 MD입니다.
+아래 "외국인 방한 트렌드 키워드"를 분석해 간단한 브리핑과 상품 아이디어를 JSON으로 주세요.
+
+[키워드] ${keyword}
+[참고 설명] ${summary || '(없음)'}
+[카테고리] ${category || '(없음)'}
+[상품 힌트] ${productHint || '(없음)'}
+
+[출력: 순수 JSON만]
+{
+  "brief": {
+    "what": "이 키워드가 무엇인지 1~2문장",
+    "whyHot": "외국인에게 왜 지금 뜨는지 1~2문장",
+    "direction": "인바운드 상품화 방향 1문장"
+  },
+  "ideas": [
+    { "title": "상품 아이디어명", "concept": "한 줄 컨셉", "target": "타깃(기본: 외국인 관광객)", "duration": "예: 반일/1일", "priceRange": "예: 5~8만원", "spots": ["연관 장소/체험"] }
+  ]
+}
+아이디어는 서로 색깔이 다른 3~4개. 외국인 타깃 기본.`;
+
+  try {
+    const { data, provider } = await llmGenerateJson({ user: prompt, openaiKey, geminiKey, temperature: 0.7 });
+    const brief = data.brief || {};
+    const ideas = Array.isArray(data.ideas) ? data.ideas : [];
+    return res.json({ success: true, keyword, brief, ideas, generatedBy: provider });
+  } catch (err) {
+    const errorMsg = err instanceof Error ? err.message : '키워드 스튜디오 생성 실패';
+    return res.status(500).json({ error: errorMsg });
+  }
+});
+
 // GET /api/web-trends — foreign-tourist Korea trend keywords discovered via
 // OpenAI web search (부산병 / 케어케이션 / 1인 세신 …), classified 인기/급상승.
 app.get('/api/web-trends', async (req, res) => {

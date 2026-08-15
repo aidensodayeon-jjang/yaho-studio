@@ -37,6 +37,10 @@ export interface YouTubePopularTrendItem {
   rank?: number;
   risingRate?: number | null;
   isNew?: boolean;
+  // Keyword-type trends (web/SNS themes) → keyword studio flow, not POI opportunity.
+  kind?: string;
+  category?: string;
+  productHint?: string;
 }
 
 export function useYouTubePopularTrends(url: string = '/api/inbound-trends') {

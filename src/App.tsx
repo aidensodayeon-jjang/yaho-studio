@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import OpportunityList from './components/OpportunityList';
+import KeywordStudio from './components/KeywordStudio';
 import OpportunityDetail from './components/OpportunityDetail';
 import { Search, TrendingUp, Sparkles, KeyRound } from 'lucide-react';
 import { useTourData } from './hooks/useTourData';
@@ -311,28 +312,37 @@ export default function App() {
           </form>
         </section>
 
-        {/* 3. Opportunity Results Section */}
-        <section className="space-y-4 pt-2">
-          <OpportunityList
-            selectedKeyword={selectedKeyword}
-            selectedEcho={selectedEcho}
-            onSelectEcho={handleSelectEcho}
-            tourData={tourData}
-            loading={tourLoading}
-            error={tourError}
-            isNationwideFallback={isNationwideFallback}
-          />
-        </section>
-
-        {/* 4. Opportunity Detail & AI Product Creation Section */}
-        {selectedEcho && (
-          <section className="bg-white rounded-3xl p-6 sm:p-8 border border-neutral-200 shadow-sm pt-6">
-            <OpportunityDetail
-              selectedEcho={selectedEcho}
-              areaCode={areaCode || 1}
-              onSelectEcho={handleSelectEcho}
-            />
+        {selectedTrend?.kind === 'keyword' ? (
+          /* Keyword trend (부산병 등): AI 브리핑 + 편집 가능한 상품 아이디어 목록 */
+          <section className="bg-white rounded-3xl p-6 sm:p-8 border border-neutral-200 shadow-sm">
+            <KeywordStudio trend={selectedTrend} />
           </section>
+        ) : (
+          <>
+            {/* 3. Opportunity Results Section (POI spot trends) */}
+            <section className="space-y-4 pt-2">
+              <OpportunityList
+                selectedKeyword={selectedKeyword}
+                selectedEcho={selectedEcho}
+                onSelectEcho={handleSelectEcho}
+                tourData={tourData}
+                loading={tourLoading}
+                error={tourError}
+                isNationwideFallback={isNationwideFallback}
+              />
+            </section>
+
+            {/* 4. Opportunity Detail & AI Product Creation Section */}
+            {selectedEcho && (
+              <section className="bg-white rounded-3xl p-6 sm:p-8 border border-neutral-200 shadow-sm pt-6">
+                <OpportunityDetail
+                  selectedEcho={selectedEcho}
+                  areaCode={areaCode || 1}
+                  onSelectEcho={handleSelectEcho}
+                />
+              </section>
+            )}
+          </>
         )}
 
       </main>

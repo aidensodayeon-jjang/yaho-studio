@@ -80,6 +80,8 @@ function toItem(t, rank) {
     poiName: (Array.isArray(t.places) && t.places[0]) || null,
     poiRegion: (Array.isArray(t.regions) && t.regions[0]) || null,
     category: t.category || '',
+    productHint: t.productHint || '',
+    kind: 'keyword', // marks a web-trend keyword → keyword studio flow (not POI opportunity)
     isNew: t.type === 'rising',
     risingRate: null,
     rank,
