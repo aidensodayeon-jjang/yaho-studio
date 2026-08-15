@@ -4,6 +4,7 @@ import { GoogleGenAI } from '@google/genai';
 import { discoverTrends, extractEntities } from './trend-discovery.js';
 import { saveSnapshot, computeRising, buildCharts } from './trend-snapshots.js';
 import { fetchInboundTrends } from './google-trends.js';
+import { fetchForeignKoreaThemes } from './youtube-rss.js';
 import { llmGenerateJson } from './llm.js';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -307,6 +308,30 @@ app.get('/api/inbound-trends', async (req, res) => {
   } catch (err) {
     const errorMsg = err instanceof Error ? err.message : '외국인 트렌드 수집 실패';
     return res.status(500).json({ version: 'inbound-trends-v1', success: false, error: errorMsg, popular: [], rising: [], data: [] });
+  }
+});
+
+// GET /api/foreign-korea-trends — what foreign audiences trend on about Korea
+// (YouTube channel RSS → theme clusters ranked by view velocity). Quota-free.
+app.get('/api/foreign-korea-trends', async (req, res) => {
+  try {
+    const openaiKey = process.env.OPENAI_API_KEY?.trim();
+    const geminiKey = process.env.GEMINI_API_KEY?.trim();
+    const { popular, rising, source, builtAt } = await fetchForeignKoreaThemes({ openaiKey, geminiKey, now: Date.now() });
+    return res.json({
+      version: 'foreign-korea-trends-v1',
+      success: true,
+      source,
+      builtAt,
+      hasBaseline: false, // rising ranks fresh uploads by velocity
+      audience: 'inbound-sns',
+      popular,
+      rising,
+      data: popular,
+    });
+  } catch (err) {
+    const errorMsg = err instanceof Error ? err.message : '외국인 SNS 트렌드 수집 실패';
+    return res.status(500).json({ version: 'foreign-korea-trends-v1', success: false, error: errorMsg, popular: [], rising: [], data: [] });
   }
 });
 

@@ -39,7 +39,7 @@ export interface YouTubePopularTrendItem {
   isNew?: boolean;
 }
 
-export function useYouTubePopularTrends() {
+export function useYouTubePopularTrends(url: string = '/api/inbound-trends') {
   const [popular, setPopular] = useState<YouTubePopularTrendItem[]>([]);
   const [rising, setRising] = useState<YouTubePopularTrendItem[]>([]);
   const [hasBaseline, setHasBaseline] = useState<boolean>(false);
@@ -51,7 +51,7 @@ export function useYouTubePopularTrends() {
     async function fetchPopularTrends() {
       setLoading(true);
       try {
-        const response = await fetch('/api/inbound-trends');
+        const response = await fetch(url);
         if (!response.ok) {
           throw new Error(`HTTP error! status: ${response.status}`);
         }
@@ -81,7 +81,7 @@ export function useYouTubePopularTrends() {
 
     fetchPopularTrends();
     return () => { isMounted = false; };
-  }, []);
+  }, [url]);
 
   // `trends` kept as an alias of `popular` for backward compatibility.
   return { popular, rising, hasBaseline, trends: popular, loading, error };
