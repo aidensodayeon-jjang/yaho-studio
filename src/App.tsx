@@ -167,7 +167,7 @@ export default function App() {
                   onClick={() => setTrendMode('web')}
                   className={`px-2.5 py-1 text-[10px] font-bold rounded-md transition-all ${trendMode === 'web' ? 'bg-white text-neutral-900 shadow-sm' : 'text-neutral-500 hover:text-neutral-900'}`}
                 >
-                  🔎 웹 트렌드
+                  🔥 핫트렌드 TOP20
                 </button>
                 <button
                   onClick={() => setTrendMode('search')}
@@ -183,7 +183,7 @@ export default function App() {
                 </button>
               </div>
               <span className="hidden sm:inline text-[10px] text-neutral-400 font-medium">
-                {trendMode === 'web' ? '🔎 웹검색 실화제 키워드' : trendMode === 'search' ? '🌏 Google Trends 검색량' : '🎥 YouTube 조회속도'}
+                {trendMode === 'web' ? '🔥 AI 웹조사 외국인 핫트렌드 TOP 20' : trendMode === 'search' ? '🌏 Google Trends 검색량' : '🎥 YouTube 조회속도'}
               </span>
             </div>
           </div>
