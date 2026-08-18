@@ -149,7 +149,7 @@ export default function App() {
               지금 뜨는 트렌드에서<br />다음 여행상품을 발견합니다.
             </h1>
             <p className="text-xs sm:text-sm text-neutral-500 font-medium leading-relaxed">
-              네이버 데이터랩 실증 트렌드 지수와 한국관광공사 POI 자원을 실시간으로 연결합니다.
+              웹·검색·SNS에서 발굴한 외국인 방한 트렌드를 한국관광공사 POI·관광상품 기획으로 연결합니다.
             </p>
           </div>
         </section>
@@ -348,7 +348,7 @@ export default function App() {
       </main>
 
       <footer className="border-t border-neutral-200 bg-white py-8 mt-16 text-center text-xs text-neutral-400">
-        YAHO STUDIO — NAVER DataLab & 한국관광공사 TourAPI 기반 관광상품 기획 가공 엔진
+        YAHO STUDIO — 외국인 방한 트렌드 인텔리전스 & 한국관광공사 TourAPI 기반 관광상품 기획 엔진
       </footer>
     </div>
   );
