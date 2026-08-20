@@ -7,12 +7,12 @@
  * extract meaningful, de-duplicated trend keywords — classified into
  * established-popular vs newly-rising (the static-vs-microtrend split).
  *
- * Uses the caller's OpenAI key (gpt-4o-mini-search-preview). Cached 12h.
+ * Uses the caller's OpenAI key (gpt-4o-mini with Responses API web_search). Cached 12h.
  */
 
 import OpenAI from 'openai';
 
-const MODEL = 'gpt-4o-mini-search-preview';
+const MODEL = 'gpt-4o-mini';
 const CACHE_TTL = 12 * 60 * 60 * 1000;
 let cache = null;
 let cacheTime = 0;
@@ -100,12 +100,13 @@ export async function fetchWebTrends({ openaiKey, now = Date.now() }) {
   let trends = [];
   try {
     const client = new OpenAI({ apiKey: openaiKey });
-    const r = await client.chat.completions.create({
+    const r = await client.responses.create({
       model: MODEL,
-      web_search_options: {},
-      messages: [{ role: 'user', content: PROMPT }],
+      input: PROMPT,
+      tools: [{ type: 'web_search' }],
     });
-    const parsed = extractJson(r.choices?.[0]?.message?.content || '');
+    const text = r.output_text || r.output?.[0]?.content?.[0]?.text || '';
+    const parsed = extractJson(text);
     trends = Array.isArray(parsed) ? parsed : parsed.trends || [];
   } catch (err) {
     console.log('[Web Trends] failed:', err?.message || err);
