@@ -1,4 +1,5 @@
 import express from 'express';
+import { registerTourProxy } from './tour-proxy.js';
 import dotenv from 'dotenv';
 import { GoogleGenAI } from '@google/genai';
 import { fetchInboundTrends } from './google-trends.js';
@@ -16,6 +17,8 @@ const __dirname = path.dirname(__filename);
 
 const app = express();
 app.use(express.json());
+registerTourProxy(app);
+app.get('/api/health', (_req, res) => res.json({ ok: true }));
 
 const PORT = process.env.PORT || 3001;
 
@@ -694,6 +697,7 @@ if (process.env.NODE_ENV === 'production') {
 
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`Server is running on http://0.0.0.0:${PORT}`);
+  if (process.env.YAHO_PREWARM === 'false') return;
   // Pre-warm the trend boards so the first request is instant.
   fetchInboundTrends(Date.now())
     .then((r) => console.log(`[Inbound Trends] pre-warmed: source=${r.source}, popular=${r.popular.length}`))

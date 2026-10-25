@@ -6,7 +6,7 @@ import {
 } from '../types/tourTrend';
 import { TOUR_TO_DATALAB_AREA_MAP } from './visitorAnalyticsApi';
 
-const TREND_API_BASE_URL = 'https://apis.data.go.kr/B551011/TatsCnctrRateService';
+const TREND_API_BASE_URL = '/api/tourapi/TatsCnctrRateService';
 
 const SIGUNGU_NAME_TO_CODE_MAP: Record<string, string> = {
   // 서울 (11)
@@ -57,18 +57,9 @@ function extractSigunguCode(address?: string): { areaCd: string; signguCd: strin
   return null;
 }
 
+// The real credential is injected by the server, never included in browser assets.
 function getDecodedServiceKey(): string {
-  const rawServiceKey = import.meta.env.VITE_TOUR_API_KEY?.trim();
-
-  if (!rawServiceKey) {
-    throw new Error('인증키가 설정되지 않았습니다. .env.local 파일의 VITE_TOUR_API_KEY를 확인해주세요.');
-  }
-
-  try {
-    return decodeURIComponent(rawServiceKey);
-  } catch {
-    return rawServiceKey;
-  }
+  return 'server-managed';
 }
 
 // 메모리 캐시 (Key: "trend_11410")

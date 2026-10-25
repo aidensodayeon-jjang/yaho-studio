@@ -1,22 +1,13 @@
 import { RelatedTourSpot } from '../types/relatedTour';
 
-const TOUR_API_BASE_URL = 'https://apis.data.go.kr/B551011/KorService2';
+const TOUR_API_BASE_URL = '/api/tourapi/KorService2';
 
 // 메모리 캐시 저장소 (contentId -> RelatedTourSpot[])
 const relatedTourCache = new Map<string, RelatedTourSpot[]>();
 
+// The real credential is injected by the server, never included in browser assets.
 function getDecodedServiceKey(): string {
-  const rawServiceKey = import.meta.env.VITE_TOUR_API_KEY?.trim();
-
-  if (!rawServiceKey) {
-    throw new Error('인증키가 설정되지 않았습니다. .env.local 파일의 VITE_TOUR_API_KEY를 확인해주세요.');
-  }
-
-  try {
-    return decodeURIComponent(rawServiceKey);
-  } catch {
-    return rawServiceKey;
-  }
+  return 'server-managed';
 }
 
 // Haversine 공식을 사용한 위경도 사이 거리(m) 계산 함수

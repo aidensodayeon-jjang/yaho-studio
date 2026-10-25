@@ -5,7 +5,7 @@ import {
 } from '../types/centralTourSpot';
 import { TOUR_TO_DATALAB_AREA_MAP } from './visitorAnalyticsApi';
 
-const CENTRAL_TOUR_API_BASE_URL = 'https://apis.data.go.kr/B551011/LocgoHubTarService1';
+const CENTRAL_TOUR_API_BASE_URL = '/api/tourapi/LocgoHubTarService1';
 
 // 주소에서 시/군/구 (예: "서대문구", "종로구", "해운대구") 및 시군구 5자리 코드 매핑 테이블
 const SIGUNGU_NAME_TO_CODE_MAP: Record<string, string> = {
@@ -82,18 +82,9 @@ function extractSigunguCode(address?: string): { areaCd: string; signguCd: strin
   return null;
 }
 
+// The real credential is injected by the server, never included in browser assets.
 function getDecodedServiceKey(): string {
-  const rawServiceKey = import.meta.env.VITE_TOUR_API_KEY?.trim();
-
-  if (!rawServiceKey) {
-    throw new Error('인증키가 설정되지 않았습니다. .env.local 파일의 VITE_TOUR_API_KEY를 확인해주세요.');
-  }
-
-  try {
-    return decodeURIComponent(rawServiceKey);
-  } catch {
-    return rawServiceKey;
-  }
+  return 'server-managed';
 }
 
 // 메모리 캐시 (Key: "signguCd_11410_202405")

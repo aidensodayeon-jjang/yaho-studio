@@ -47,7 +47,7 @@ export interface VisitorApiResponse {
   };
 }
 
-const DATALAB_API_BASE_URL = 'https://apis.data.go.kr/B551011/DataLabService';
+const DATALAB_API_BASE_URL = '/api/tourapi/DataLabService';
 
 // TourAPI areaCode (1~39) -> DataLab API areaCode (11~52) 매핑
 export const TOUR_TO_DATALAB_AREA_MAP: Record<number, { dataLabCode: string; name: string }> = {
@@ -70,18 +70,9 @@ export const TOUR_TO_DATALAB_AREA_MAP: Record<number, { dataLabCode: string; nam
   39: { dataLabCode: '50', name: '제주특별자치도' },
 };
 
+// The real credential is injected by the server, never included in browser assets.
 function getDecodedServiceKey(): string {
-  const rawServiceKey = import.meta.env.VITE_TOUR_API_KEY?.trim();
-
-  if (!rawServiceKey) {
-    throw new Error('인증키가 설정되지 않았습니다. .env.local 파일의 VITE_TOUR_API_KEY를 확인해주세요.');
-  }
-
-  try {
-    return decodeURIComponent(rawServiceKey);
-  } catch {
-    return rawServiceKey;
-  }
+  return 'server-managed';
 }
 
 // 메모리 캐시 (Key: "metco_11" 또는 "locgo_종로구")
